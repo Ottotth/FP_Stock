@@ -1,0 +1,4 @@
+ .app { padding: 24px; max-width: 900px; margin: 0 auto; }
+ header { margin-bottom: 16px }
+ ul { list-style: none; padding: 0 }
+ li { padding: 8px 0; border-bottom: 1px solid #eee }
