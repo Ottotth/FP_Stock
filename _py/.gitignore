@@ -1,0 +1,77 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Local virtualenv created by this project
+_pyenv/
+
+# Python environment configuration
+.python-version
+
+# Jupyter Notebook checkpoints and runtime files
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IPython
+profile_default/
+
+# pyenv
+.python-version
+
+# pip cache
+pip-wheel-metadata/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Unit test / coverage reports
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# mypy
+.mypy_cache/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Django stuff:
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
