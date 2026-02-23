@@ -52,4 +52,9 @@ public class StockDataImpl implements StockDataOperation {
   public List<HeatMapEntity> getHeatMapData() {
     return stockDataService.getHeatMapData();
   }
+
+  @Override
+  public List<String> getAllSymbols() {
+    return stockDataService.getAllSymbols();
+  }
 }

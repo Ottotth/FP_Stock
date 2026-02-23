@@ -29,5 +29,6 @@ public interface StockDataOperation {
   @GetMapping("/heatMapData")
   List<HeatMapEntity> getHeatMapData();
 
-
+  @GetMapping("/allsymbols")
+  List<String> getAllSymbols();
 }

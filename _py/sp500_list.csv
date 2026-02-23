@@ -1,4 +1,4 @@
-Symbol,Security,GICS Sector,Headquarters Location
+symbol,security,gics_sector,headquarters_location
 MMM,3M,Industrials,"Saint Paul, Minnesota"
 AOS,A. O. Smith,Industrials,"Milwaukee, Wisconsin"
 ABT,Abbott Laboratories,Health Care,"North Chicago, Illinois"
@@ -356,7 +356,7 @@ ORCL,Oracle Corporation,Information Technology,"Austin, Texas"
 OTIS,Otis Worldwide,Industrials,"Farmington, Connecticut"
 PCAR,Paccar,Industrials,"Bellevue, Washington"
 PKG,Packaging Corporation of America,Materials,"Lake Forest, Illinois"
-PLTR,Palantir Technologies,Information Technology,"Denver, Colorado"
+PLTR,Palantir Technologies,Information Technology,"Aventura, Florida"
 PANW,Palo Alto Networks,Information Technology,"Santa Clara, California"
 PSKY,Paramount Skydance Corporation,Communication Services,"Los Angeles, California"
 PH,Parker Hannifin,Industrials,"Cleveland, Ohio"

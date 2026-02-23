@@ -2,12 +2,17 @@ package com.bootcamp.stock.data_provider_app.mapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
+import com.bootcamp.stock.data_provider_app.repository.SPListRepository;
 
 @Component
 public class DtoMapper {
+
+  @Autowired
+  private SPListRepository spListRepository;
 
   public List<HeatMapEntity> mapRealTimeStockDataToHeatMapEntity(
       RealTimeSTockDTO realTimeStockData) {
@@ -21,6 +26,7 @@ public class DtoMapper {
         heatMapEntity.setPriceChange(result.getRegularMarketChange());
         heatMapEntity.setChangePercent(result.getRegularMarketChangePercent());
         heatMapEntity.setVolume(result.getRegularMarketVolume());
+        heatMapEntity.setGicsSector(spListRepository.findGicsSectorBySymbol(result.getSymbol()));
         heatMapData.add(heatMapEntity);
       }
     }

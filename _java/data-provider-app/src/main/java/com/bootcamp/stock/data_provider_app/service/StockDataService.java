@@ -21,4 +21,6 @@ List<OldStockDataEntity> getOldStockData(String symbol, String interval, int day
 List<HeatMapEntity> updateHeatMapData();
 
 List<HeatMapEntity> getHeatMapData();
+
+List<String> getAllSymbols();
 }

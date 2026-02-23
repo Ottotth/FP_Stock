@@ -13,7 +13,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import com.bootcamp.stock.data_provider_app.config.lib.CsvLoader;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
@@ -24,6 +23,7 @@ import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
 import com.bootcamp.stock.data_provider_app.model.dto.StockChartDTO;
 import com.bootcamp.stock.data_provider_app.repository.HeatMapRepository;
 import com.bootcamp.stock.data_provider_app.repository.OldStockDataRepository;
+import com.bootcamp.stock.data_provider_app.repository.SPListRepository;
 import com.bootcamp.stock.data_provider_app.repository.StockDataRepository;
 import com.bootcamp.stock.data_provider_app.service.StockDataService;
 
@@ -57,13 +57,13 @@ public class StockDataServiceImpl implements StockDataService {
   private RedisManager redisManager;
 
   @Autowired
-  private CsvLoader csvLoader;
-
-  @Autowired
   private DtoMapper dtoMapper;
 
   @Autowired
   private HeatMapRepository heatMapRepository;
+
+  @Autowired
+  private SPListRepository spListRepository;
 
   // Get the stock data by symbol and interval ---------------------------------
   @Override
@@ -149,8 +149,8 @@ public class StockDataServiceImpl implements StockDataService {
   // Update the heat map data from DB------------------------------------------------------
   @Override
   public List<HeatMapEntity> updateHeatMapData() {
-    List<String> symbols = csvLoader.loadSymbolsFromCsv();
-    String symbolsStr = csvLoader.flatSymbolsList(symbols);
+    List<String> symbols = getAllSymbols();
+    String symbolsStr = String.join(",", symbols);
     RealTimeSTockDTO realTimeStockDTO = getRealTimeStockData(symbolsStr);
     List<HeatMapEntity> heatMapEntities =
         dtoMapper.mapRealTimeStockDataToHeatMapEntity(realTimeStockDTO);
@@ -162,6 +162,12 @@ public class StockDataServiceImpl implements StockDataService {
   @Override
   public List<HeatMapEntity> getHeatMapData() {
     return heatMapRepository.findAll();
+  }
+
+  // Get all symbols from DB------------------------------------------------------
+  @Override
+  public List<String> getAllSymbols() {
+    return spListRepository.findAllSymbols();
   }
 }
 
