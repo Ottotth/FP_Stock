@@ -31,4 +31,6 @@ public class HeatMapEntity {
   private double changePercent;
 
   private long volume;
+
+  private String gicsSector;
 }

@@ -4,7 +4,6 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import com.bootcamp.stock.data_provider_app.config.lib.CsvLoader;
 import com.bootcamp.stock.data_provider_app.model.enums.Interval;
 import com.bootcamp.stock.data_provider_app.service.StockDataService;
 
@@ -14,15 +13,12 @@ public class StockUpdater {
   @Autowired
 	private StockDataService stockDataService;
 
-	@Autowired
-	private CsvLoader csvLoader;
-
 	@Value("${app.symbolsCsvPath:../../_py/sp500_list.csv}")
 	private String symbolsCsvPath;
 
 // --------------------------Update Stock Chart Data------------------//
   public void updateAllStockData() {
-		List<String> symbols = csvLoader.loadSymbolsFromCsv();
+		List<String> symbols = stockDataService.getAllSymbols();
 		if (symbols.isEmpty()) {
 			System.out.println("No symbols loaded from CSV: " + symbolsCsvPath);
 			return;
@@ -46,7 +42,7 @@ public class StockUpdater {
 
 	// --------------------------Update the Old Data to other table------------------//
 	public void updateOldData() {
-		List<String> symbols = csvLoader.loadSymbolsFromCsv();
+		List<String> symbols = stockDataService.getAllSymbols();
 		for (String symbol : symbols) {
 			for (Interval interval : Interval.values()) {
 				try {
