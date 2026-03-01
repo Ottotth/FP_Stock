@@ -33,4 +33,12 @@ public class HeatMapEntity {
   private long volume;
 
   private String gicsSector;
+
+  private String security;
+
+  private Long marketCap;
+  
+  private double regularMarketDayHigh;
+  
+  private double regularMarketDayLow;
 }

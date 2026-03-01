@@ -8,10 +8,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Component;
-import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
-import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
 import com.bootcamp.stock.data_provider_app.model.dto.StockChartDTO;
 
 @Component
@@ -115,15 +113,6 @@ public class EntityMapper {
         .close(stockDataEntity.getClose())
         .volume(stockDataEntity.getVolume())
         .adjClose(stockDataEntity.getAdjClose())
-        .build();
-  }
-
-  public HeatMapEntity toHeatMapEntity(RealTimeSTockDTO realTimeStockDTO) {
-    return HeatMapEntity.builder()
-        .symbol(realTimeStockDTO.getQuoteResponse().getResult().get(0).getSymbol())
-        .currentPrice(realTimeStockDTO.getQuoteResponse().getResult().get(0).getRegularMarketPrice())
-        .changePercent(realTimeStockDTO.getQuoteResponse().getResult().get(0).getRegularMarketChangePercent())
-        .volume(realTimeStockDTO.getQuoteResponse().getResult().get(0).getRegularMarketVolume())
         .build();
   }
   

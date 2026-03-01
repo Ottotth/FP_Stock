@@ -6,15 +6,18 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import org.springframework.web.client.RestTemplate;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
-import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
+import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.mapper.DtoMapper;
@@ -46,6 +49,9 @@ public class StockDataServiceImpl implements StockDataService {
 
   @Autowired
   private RestTemplate restTemplate;
+
+  @Autowired
+  private EntityManager entityManager;
 
   @Autowired
   private HttpEntity<String> httpEntity;
@@ -86,13 +92,20 @@ public class StockDataServiceImpl implements StockDataService {
 
   // Update the Stock Chart Data ------------------------------------------------
   @Override
+  @Transactional
   public StockChartDTO updateStockChartData(String symbol, String interval) {
     System.out.println("Updating stock chart data for symbol: " + symbol
         + ", interval: " + interval);
-    StockDataEntity latestData =
-        stockDataRepository.findNewestDataEntity(symbol, interval);
-    ZonedDateTime latestDateTime =
-        latestData.getDateTime().atZone(ZoneId.of("UTC"));
+    StockDataEntity latestData = stockDataRepository.findTopBySymbolAndIntervalOrderByDateTimeDesc(symbol, interval);
+    ZonedDateTime latestDateTime = null;
+    // 防止 latestData 為 null 或 getDateTime() 回傳 null 時拋出 NullPointerException
+    if (latestData != null && latestData.getDateTime() != null) {
+      latestDateTime = latestData.getDateTime().atZone(ZoneId.of("UTC"));
+    }
+    else {
+      // 若無最近時間則退回到預設的往前 8 天作為起始時間
+      latestDateTime = ZonedDateTime.now(ZoneId.of("UTC")).minusDays(8);
+    }
     System.out.println("Latest DateTime: " + latestDateTime);
     long latestTimestamp = latestDateTime.toEpochSecond();
     ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
@@ -107,14 +120,40 @@ public class StockDataServiceImpl implements StockDataService {
         HttpMethod.GET, httpEntity, StockChartDTO.class);
     StockChartDTO stockChartDTO = response.getBody();
 
+    List<StockDataEntity> newEntities = entityMapper.toStockDataEntityList(stockChartDTO);
 
-    List<StockDataEntity> newEntities =
-        entityMapper.toStockDataEntityList(stockChartDTO);
-    System.out.println("New Entities Size: "
-        + (newEntities != null ? newEntities.size() : "null"));
+    if (newEntities != null && !newEntities.isEmpty()) {
+      // Collect ids and fetch existing entities in a single query to avoid N+1 selects
+      List<Long> ids = newEntities.stream().map(StockDataEntity::getId).collect(Collectors.toList());
+      List<StockDataEntity> existing = stockDataRepository.findAllById(ids);
+      // Map existing by id for quick lookup
+      Map<Long, StockDataEntity> existingMap = existing.stream()
+          .collect(Collectors.toMap(StockDataEntity::getId, e -> e));
 
-    if (newEntities != null) {
-      stockDataRepository.saveAll(newEntities);
+      List<StockDataEntity> toUpdate = new java.util.ArrayList<>();
+
+      for (StockDataEntity e : newEntities) {
+        StockDataEntity exist = existingMap.get(e.getId());
+        if (exist != null) {
+          // update managed entity fields
+          exist.setOpen(e.getOpen());
+          exist.setHigh(e.getHigh());
+          exist.setLow(e.getLow());
+          exist.setClose(e.getClose());
+          exist.setVolume(e.getVolume());
+          exist.setAdjClose(e.getAdjClose());
+          exist.setDateTime(e.getDateTime());
+          toUpdate.add(exist);
+        } else {
+          // new entity: persist directly to avoid merge select
+          entityManager.persist(e);
+        }
+      }
+
+      if (!toUpdate.isEmpty()) {
+        stockDataRepository.saveAll(toUpdate);
+      }
+      System.out.println("----------save---------");
     }
 
     return stockChartDTO;
@@ -148,20 +187,13 @@ public class StockDataServiceImpl implements StockDataService {
 
   // Update the heat map data from DB------------------------------------------------------
   @Override
-  public List<HeatMapEntity> updateHeatMapData() {
+  public HeatMapDto updateHeatMapData() {
     List<String> symbols = getAllSymbols();
     String symbolsStr = String.join(",", symbols);
     RealTimeSTockDTO realTimeStockDTO = getRealTimeStockData(symbolsStr);
-    List<HeatMapEntity> heatMapEntities =
-        dtoMapper.mapRealTimeStockDataToHeatMapEntity(realTimeStockDTO);
-    heatMapRepository.saveAll(heatMapEntities);
-    return heatMapEntities;
-  }
-
-  // Get the heat map data from DB------------------------------------------------------
-  @Override
-  public List<HeatMapEntity> getHeatMapData() {
-    return heatMapRepository.findAll();
+    HeatMapDto heatMapDto = dtoMapper.mapRealTimeStockDataToHeatMapDto(realTimeStockDTO);
+    heatMapRepository.saveAll(heatMapDto.getHeatMapData());
+    return heatMapDto;
   }
 
   // Get all symbols from DB------------------------------------------------------

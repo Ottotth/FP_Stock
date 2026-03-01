@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
 import com.bootcamp.stock.data_provider_app.repository.SPListRepository;
@@ -14,7 +15,7 @@ public class DtoMapper {
   @Autowired
   private SPListRepository spListRepository;
 
-  public List<HeatMapEntity> mapRealTimeStockDataToHeatMapEntity(
+  public HeatMapDto mapRealTimeStockDataToHeatMapDto(
       RealTimeSTockDTO realTimeStockData) {
     List<HeatMapEntity> heatMapData = new ArrayList<>();
     if (realTimeStockData != null) {
@@ -27,9 +28,13 @@ public class DtoMapper {
         heatMapEntity.setChangePercent(result.getRegularMarketChangePercent());
         heatMapEntity.setVolume(result.getRegularMarketVolume());
         heatMapEntity.setGicsSector(spListRepository.findGicsSectorBySymbol(result.getSymbol()));
+        heatMapEntity.setSecurity(spListRepository.findSecurityBySymbol(result.getSymbol()));
+        heatMapEntity.setMarketCap(result.getMarketCap());
+        heatMapEntity.setRegularMarketDayHigh(result.getRegularMarketDayHigh());
+        heatMapEntity.setRegularMarketDayLow(result.getRegularMarketDayLow());
         heatMapData.add(heatMapEntity);
       }
     }
-    return heatMapData;
+    return HeatMapDto.builder().heatMapData(heatMapData).build();
   }
 }

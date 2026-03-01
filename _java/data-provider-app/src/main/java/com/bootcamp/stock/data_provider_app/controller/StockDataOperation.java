@@ -3,7 +3,7 @@ package com.bootcamp.stock.data_provider_app.controller;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
+import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
@@ -24,11 +24,11 @@ public interface StockDataOperation {
   List<OldStockDataEntity> getOldStockData(@RequestParam String symbol, @RequestParam String interval, @RequestParam int days);
 
   @GetMapping("/updateheatMapData")
-  List<HeatMapEntity> updateHeatMapData();
-
-  @GetMapping("/heatMapData")
-  List<HeatMapEntity> getHeatMapData();
+  HeatMapDto updateHeatMapData();
 
   @GetMapping("/allsymbols")
   List<String> getAllSymbols();
+
+  @GetMapping("/updateAllData")
+  String updateAllData();
 }
