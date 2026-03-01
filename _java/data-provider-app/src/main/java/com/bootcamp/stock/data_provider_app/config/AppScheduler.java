@@ -50,9 +50,10 @@ public class AppScheduler {
 
     if (!running.compareAndSet(false, true)) return; // 已有執行中則跳過
     try {
-      stockDataService.getHeatMapData(/* 可傳 symbols 或空 */);
+      stockDataService.updateHeatMapData(/* 可傳 symbols 或空 */);
+			System.out.println("Heat map data updated at " + now);
     } finally {
-      running.set(false);
+       running.set(false);
     }
 	}
 }

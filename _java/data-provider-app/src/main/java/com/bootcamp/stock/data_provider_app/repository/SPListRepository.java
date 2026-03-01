@@ -14,4 +14,7 @@ public interface SPListRepository extends JpaRepository<SPListEntity, String> {
 
   @Query("SELECT s.gicsSector FROM SPListEntity s WHERE s.symbol = :symbol")
   String findGicsSectorBySymbol(String symbol);
+
+  @Query("SELECT s.security FROM SPListEntity s WHERE s.symbol = :symbol")
+  String findSecurityBySymbol(String symbol);
 }
