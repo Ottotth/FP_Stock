@@ -8,7 +8,6 @@ import com.bootcamp.stock.data_provider_app.config.StockUpdater;
 import com.bootcamp.stock.data_provider_app.controller.StockDataOperation;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
-import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
 import com.bootcamp.stock.data_provider_app.model.dto.StockChartDTO;
 import com.bootcamp.stock.data_provider_app.service.StockDataService;
@@ -22,11 +21,7 @@ public class StockDataImpl implements StockDataOperation {
   @Autowired
   private StockUpdater stockUpdater;
 
-  @Override
-  public List<StockDataEntity> getSymbolAndInterval(@RequestParam String symbol,
-      @RequestParam String interval) {
-    return stockDataService.getBySymbolAndInterval(symbol, interval);
-  }
+  
 
   @Override
   public StockChartDTO updateStockChartData(@RequestParam String symbol,

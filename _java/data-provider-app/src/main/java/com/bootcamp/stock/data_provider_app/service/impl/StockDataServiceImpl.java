@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.springframework.web.client.RestTemplate;
+import com.bootcamp.stock.data_provider_app.config.lib.CodeLib;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
@@ -71,6 +72,9 @@ public class StockDataServiceImpl implements StockDataService {
   @Autowired
   private SPListRepository spListRepository;
 
+  @Autowired
+  private CodeLib codeLib;
+
   // Get the stock data by symbol and interval ---------------------------------
   @Override
   public List<StockDataEntity> getBySymbolAndInterval(String symbol,
@@ -103,9 +107,9 @@ public class StockDataServiceImpl implements StockDataService {
       latestDateTime = latestData.getDateTime().atZone(ZoneId.of("UTC"));
     }
     else {
-      // 若無最近時間則退回到預設的往前 8 天作為起始時間
-      latestDateTime = ZonedDateTime.now(ZoneId.of("UTC")).minusDays(8);
-    }
+      // 若無最近時間則退回到預設的往前作為起始時間
+      latestDateTime = codeLib.calculateLatestDateTime(interval);
+    } 
     System.out.println("Latest DateTime: " + latestDateTime);
     long latestTimestamp = latestDateTime.toEpochSecond();
     ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
@@ -114,11 +118,20 @@ public class StockDataServiceImpl implements StockDataService {
     String url = String.format(
         "https://query1.finance.yahoo.com/v8/finance/chart/%s?period1=%d&period2=%d&interval=%s&events=history",
         symbol, latestTimestamp, nowTimestamp, interval);
-
+      System.out.println("Request URL: " + url);
     // 使用注入的 HttpEntity Bean
     ResponseEntity<StockChartDTO> response = restTemplate.exchange(url,
         HttpMethod.GET, httpEntity, StockChartDTO.class);
     StockChartDTO stockChartDTO = response.getBody();
+
+    if (stockChartDTO != null
+        && stockChartDTO.getChart() != null
+        && stockChartDTO.getChart().getResult() != null
+        && !stockChartDTO.getChart().getResult().isEmpty()
+        && stockChartDTO.getChart().getResult().get(0) != null
+        && stockChartDTO.getChart().getResult().get(0).getTimestamp() == null) {
+      return null;
+    }
 
     List<StockDataEntity> newEntities = entityMapper.toStockDataEntityList(stockChartDTO);
 

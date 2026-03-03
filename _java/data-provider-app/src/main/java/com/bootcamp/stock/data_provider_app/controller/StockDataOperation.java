@@ -5,14 +5,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
-import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
 import com.bootcamp.stock.data_provider_app.model.dto.StockChartDTO;
 
 public interface StockDataOperation {
 
-  @GetMapping("/stockdata")
-  List<StockDataEntity> getSymbolAndInterval(@RequestParam String symbol, @RequestParam String interval);
+
 
   @GetMapping("/updateStock")
   StockChartDTO updateStockChartData(@RequestParam String symbol, @RequestParam String interval);
