@@ -17,4 +17,7 @@ public interface SPListRepository extends JpaRepository<SPListEntity, String> {
 
   @Query("SELECT s.security FROM SPListEntity s WHERE s.symbol = :symbol")
   String findSecurityBySymbol(String symbol);
+
+  @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM SPListEntity s WHERE s.symbol = :symbol")
+  Boolean existsBySymbol(String symbol);
 }

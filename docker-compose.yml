@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres-container
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin1234
+      POSTGRES_DB: stock_db
+      PGDATA: /var/lib/postgresql/data/pgdata15
+    networks:
+      - bootcamp-network
+    ports:
+      - "5532:5432"
+    volumes:
+      - "./pgdata:/var/lib/postgresql/data/pgdata"
+
+  redis:
+    image: redis:7
+    container_name: redis-container
+    networks:
+      - bootcamp-network
+    ports:
+      - "6479:6379"
+    volumes:
+      - "./redis_data:/data"
+
+  # You prepare the setup for your app.
+  # data-provider-app
+  # stock-data-app
+  # heatmap-ui-app
+
+networks:
+  bootcamp-network:
+
+volumes:
+  redis_data:
+
+

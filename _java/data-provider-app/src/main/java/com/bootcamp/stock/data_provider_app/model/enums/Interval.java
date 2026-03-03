@@ -8,7 +8,7 @@ public enum Interval {
   ONE_HOUR("1h"),
   FOUR_HOURS("4h"),
   ONE_DAY("1d"),
-  ONE_WEEK("1w"),
+  ONE_WEEK("1wk"),
   ONE_MONTH("1mo"),
   THREE_MONTHS("3mo");
 

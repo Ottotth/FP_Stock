@@ -16,10 +16,10 @@ import com.bootcamp.stock.data_provider_app.service.StockDataService;
 public class AppScheduler {
 
 	@Autowired
-	private StockUpdater stockUpdater;
+	private StockDataService stockDataService;
 
 	@Autowired
-	private StockDataService stockDataService;
+	private StockUpdater stockUpdater;
 
 	private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -39,21 +39,21 @@ public class AppScheduler {
 	@Scheduled(fixedDelay = 5000, zone = "America/New_York")
 	public void updateHeatMapData() {
 		ZonedDateTime now = ZonedDateTime.now(ZoneId.of("America/New_York"));
-    DayOfWeek dow = now.getDayOfWeek();
-    if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) return;
+		DayOfWeek dayOfWeek = now.getDayOfWeek();
+		if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) return;
 
-    LocalTime t = now.toLocalTime();
-    LocalTime open = LocalTime.of(9, 30);
-    LocalTime close = LocalTime.of(16, 0);
+		LocalTime current = now.toLocalTime();
+		LocalTime open = LocalTime.of(9, 30);
+		LocalTime close = LocalTime.of(16, 0);
 
-    if (t.isBefore(open) || t.isAfter(close)) return;
+		if (current.isBefore(open) || current.isAfter(close)) return;
 
-    if (!running.compareAndSet(false, true)) return; // 已有執行中則跳過
-    try {
-      stockDataService.updateHeatMapData(/* 可傳 symbols 或空 */);
+		if (!running.compareAndSet(false, true)) return;
+		try {
+			stockDataService.updateHeatMapData();
 			System.out.println("Heat map data updated at " + now);
-    } finally {
-       running.set(false);
-    }
+		} finally {
+			running.set(false);
+		}
 	}
 }

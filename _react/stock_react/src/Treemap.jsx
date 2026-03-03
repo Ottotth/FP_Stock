@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react'
 import { hierarchy, treemap, treemapSquarify } from 'd3-hierarchy'
+import CandlestickView from './CandlestickView'
 
 function colorFor(change) {
   // 變動以百分比表示；產生一個綠↔灰↔紅的配色，並控制明度
@@ -19,7 +20,7 @@ function colorFor(change) {
   return `hsl(0, ${saturation}%, ${lightness}%)`
 }
 
-export default function Treemap({ data = [], width = 1000, height = 600, padding = 2, maxRatio = 1.5, valueExponent = 1, capEnabled = false, capPercentile = 99, scaleMode = 'linear', layoutMode = 'treemap', gridDesired = 24, topPercentile = 0, topExtraCells = 0, gridAllocExponent = 1, sectorHeaderHeight = 16, tileStrokeColor = '#000', tileHoverStrokeColor = '#0b63ff', tileHoverStrokeWidth = 1.6, groupOutlineColor = '#000000', groupHeaderColor = '#000000', tileTextColor = '#fff', headerTextColor = '#fff', groupCornerRadius = 4, groupOutlineInset = 1, groupOutlineWidth = 1, onSelectSymbol = () => {}}) {
+export default function Treemap({ data = [], width = 1000, height = 600, padding = 2, maxRatio = 1.5, valueExponent = 1, capEnabled = false, capPercentile = 99, scaleMode = 'linear', layoutMode = 'treemap', gridDesired = 24, topPercentile = 0, topExtraCells = 0, gridAllocExponent = 1, sectorHeaderHeight = 16, tileStrokeColor = '#000', tileHoverStrokeColor = '#0b63ff', tileHoverStrokeWidth = 1.6, groupOutlineColor = '#000000', groupHeaderColor = '#000000', tileTextColor = '#fff', headerTextColor = '#fff', groupCornerRadius = 4, groupOutlineInset = 1, groupOutlineWidth = 1, onSelectSymbol = () => {}, externalCandleRequest = null}) {
   // data: 陣列，格式範例 { symbol, marketCap, changePercent }
   const containerRef = useRef(null)
   const resizeTimeout = useRef(null)
@@ -28,6 +29,8 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
   const [hoveredSymbol, setHoveredSymbol] = useState(null)
   const [hoveredCategory, setHoveredCategory] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [viewMode, setViewMode] = useState('heatmap')
+  const [candleSymbol, setCandleSymbol] = useState(null)
   const ZOOM_TOP_ROW_TOLERANCE = 4
   const ZOOM_HEADER_SEAM_MASK = 3
 
@@ -62,6 +65,25 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
     }
   }, [width, height])
 
+  const openCandles = (symbol) => {
+    if (!symbol) return
+    try { onSelectSymbol(symbol) } catch (error) {}
+    setTooltip(t => ({ ...t, show: false }))
+    setHoveredSymbol(null)
+    setCandleSymbol(symbol)
+    setViewMode('candles')
+  }
+
+  const backToHeatmap = () => {
+    setViewMode('heatmap')
+  }
+
+  useEffect(() => {
+    const requestedSymbol = String(externalCandleRequest?.symbol || '').trim().toUpperCase()
+    if (!requestedSymbol) return
+    openCandles(requestedSymbol)
+  }, [externalCandleRequest])
+
   const root = useMemo(() => {
     // 使用次方轉換放大較大的值，讓大項目比小項目成長更快
     // 先按類別（如 sector）彙整，再以 symbol 聚合，確保相同類別的股票群聚
@@ -87,13 +109,14 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
         return 'UNCATEGORIZED'
       }
       // 清理 symbol：轉大寫並移除非英數字元
-      const cleanSym = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+      const cleanSym = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9\-\^]/g, '')
 
       const catMap = new Map()
       for (const d of data) {
         const rawSym = pickSymbol(d)
         const sym = cleanSym(rawSym)
         if (!sym) continue
+        if (sym === '^GSPC') continue
         const catRaw = pickCategory(d)
         const cat = String(catRaw || 'UNCATEGORIZED').trim() || 'UNCATEGORIZED'
 
@@ -351,6 +374,15 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {viewMode === 'candles' ? (
+        <CandlestickView
+          symbol={candleSymbol}
+          width={size.width}
+          height={size.height}
+          onBack={backToHeatmap}
+        />
+      ) : (
+        <>
       <svg viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: '100%' }}>
         <g>
           {/* 每類別的 clipPath 以及分組後的 tile 繪製，避免 tiles 被 header/outline 遮蓋 */}
@@ -454,7 +486,15 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
                   }
                   const handleLeave = () => { setHoveredSymbol(null); setTooltip(t => ({ ...t, show: false })) }
                   return (
-                    <g key={`${sym}_${i}`} onMouseEnter={handleEnter} onMouseMove={handleMove} onMouseLeave={handleLeave} onClick={() => { try { onSelectSymbol(sym) } catch (e) {} }} style={{ cursor: 'pointer' }}>
+                    <g
+                      key={`${sym}_${i}`}
+                      onMouseEnter={handleEnter}
+                      onMouseMove={handleMove}
+                      onMouseLeave={handleLeave}
+                      onClick={() => { try { onSelectSymbol(sym) } catch (e) {} }}
+                      onDoubleClick={() => openCandles(sym)}
+                      style={{ cursor: 'pointer' }}
+                    >
                       {(() => {
                         // 判斷目前 tile 是否被 hover，以決定描邊樣式
                         const isHovered = hoveredSymbol === sym
@@ -513,9 +553,13 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
             // 判斷是否因 tile hover 或 header/outline hover 而使此類別為活動狀態
             const hoveredBox = root.__symbolBoxes && root.__symbolBoxes.get(hoveredSymbol)
             const isCatHovered = (hoveredBox && hoveredBox.category === cat) || (hoveredCategory === cat)
-            const isCatActive = isSelectedCategory || isCatHovered
-            const activeOutlineColor = isCatActive ? tileHoverStrokeColor : groupOutlineColor
-            const activeHeaderColor = isCatActive ? tileHoverStrokeColor : groupHeaderColor
+            const isHeaderOrOutlineHovered = hoveredCategory === cat
+            const activeOutlineColor = selectedCategory
+              ? (isHeaderOrOutlineHovered ? tileHoverStrokeColor : groupOutlineColor)
+              : (isCatHovered ? tileHoverStrokeColor : groupOutlineColor)
+            const activeHeaderColor = selectedCategory
+              ? (isHeaderOrOutlineHovered ? tileHoverStrokeColor : groupHeaderColor)
+              : (isCatHovered ? tileHoverStrokeColor : groupHeaderColor)
 
             // 若垂直空間足夠，將 header 畫成浮動帶置於群組外框之上，以符合設計參考
             const canFloatHeader = ch > Math.max(labelH * 1.2, 24)
@@ -660,6 +704,8 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
           {tooltip.marketCap != null && <div>MCap: {Number(tooltip.marketCap).toLocaleString()}</div>}
           {tooltip.volume != null && <div>Vol: {tooltip.volume}</div>}
         </div>
+      )}
+        </>
       )}
     </div>
   )

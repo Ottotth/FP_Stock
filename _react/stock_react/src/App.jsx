@@ -1,41 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
-import * as d3 from 'd3'
 import './App.css'
 import Treemap from './Treemap'
-
-const NEWS_PLACEHOLDERS = [
-  'News slot 1',
-  'News slot 2',
-  'News slot 3',
-  'News slot 4',
-  'News slot 5'
-]
-
-const numberFormatter = new Intl.NumberFormat('en-US')
-
-function formatSignedPercent(value) {
-  if (value == null || Number.isNaN(Number(value))) return '-'
-  const numeric = Number(value)
-  const fixed = numeric.toFixed(2)
-  return `${numeric > 0 ? '+' : ''}${fixed}%`
-}
-
-function formatCompactNumber(value) {
-  if (!Number.isFinite(Number(value))) return '-'
-  return Number(value).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  })
-}
-
-function formatMillions(value) {
-  if (!Number.isFinite(Number(value))) return '-'
-  return `${(Number(value) / 1_000_000).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  })}M`
-}
+import Sidebar from './Sidebar'
 
 function extractNumericValue(point) {
   if (point == null) return null
@@ -122,84 +89,6 @@ function normalizeSeriesPayload(payload) {
   return []
 }
 
-function StockTrendChart({ series, loading }) {
-  const width = 320
-  const height = 170
-  const margin = { top: 12, right: 10, bottom: 20, left: 4 }
-  const yAxisGutter = 32
-
-  const chart = useMemo(() => {
-    if (!Array.isArray(series) || series.length === 0) return null
-    const valid = series.filter(point => point && point.date instanceof Date && Number.isFinite(point.value))
-    if (valid.length === 0) return null
-
-    const innerWidth = width - margin.left - margin.right - yAxisGutter
-    const innerHeight = height - margin.top - margin.bottom
-
-    const xDomain = d3.extent(valid, point => point.date)
-    if (!xDomain[0] || !xDomain[1]) return null
-
-    const yMin = d3.min(valid, point => point.value)
-    const yMax = d3.max(valid, point => point.value)
-    if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) return null
-
-    const yPad = Math.max((yMax - yMin) * 0.08, yMax === yMin ? Math.max(1, yMax * 0.02) : 0)
-    const xScale = d3.scaleUtc().domain(xDomain).range([yAxisGutter, yAxisGutter + innerWidth])
-    const yScale = d3.scaleLinear().domain([yMin - yPad, yMax + yPad]).nice().range([innerHeight, 0])
-    const line = d3.line().x(point => xScale(point.date)).y(point => yScale(point.value)).curve(d3.curveLinear)
-
-    return {
-      innerWidth,
-      innerHeight,
-      yAxisGutter,
-      xScale,
-      yScale,
-      linePath: line(valid),
-      xTicks: xScale.ticks(4),
-      yTicks: yScale.ticks(4)
-    }
-  }, [series])
-
-  if (loading) {
-    return (
-      <div className="trend-chart-fixed">
-        <div className="chart-empty">Loading trend...</div>
-      </div>
-    )
-  }
-
-  if (!chart) {
-    return (
-      <div className="trend-chart-fixed">
-        <div className="chart-empty">No trend data ({Array.isArray(series) ? series.length : 0} points)</div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="trend-chart-fixed">
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="trend-svg" role="img" aria-label="30 day stock trend chart">
-        <rect x="0" y="0" width={width} height={height} fill="transparent" stroke="rgba(255,255,255,0.24)" />
-        <g transform={`translate(${margin.left},${margin.top})`}>
-          {chart.yTicks.map((tick, index) => (
-            <g key={`y_${index}`}>
-              <line x1={chart.yAxisGutter} x2={chart.yAxisGutter + chart.innerWidth} y1={chart.yScale(tick)} y2={chart.yScale(tick)} stroke="rgba(255,255,255,0.08)" />
-              <text x={chart.yAxisGutter - 4} y={chart.yScale(tick)} textAnchor="end" dominantBaseline="middle" className="axis-label">{formatCompactNumber(tick)}</text>
-            </g>
-          ))}
-          {chart.xTicks.map((tick, index) => (
-            <g key={`x_${index}`} transform={`translate(${chart.xScale(tick)},0)`}>
-              <line y1="0" y2={chart.innerHeight} stroke="rgba(255,255,255,0.06)" />
-              <text y={chart.innerHeight + 14} textAnchor="middle" className="axis-label">{d3.timeFormat('%m/%d')(tick)}</text>
-            </g>
-          ))}
-          {chart.linePath && <path d={chart.linePath} fill="none" stroke="#4ddc7c" strokeWidth="2" />}
-        </g>
-      </svg>
-    </div>
-  )
-}
-
 export default function App() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -207,6 +96,23 @@ export default function App() {
   const [chartSeries, setChartSeries] = useState([])
   const [currentInfo, setCurrentInfo] = useState(null)
   const [chartLoading, setChartLoading] = useState(false)
+  const [gspcInfo, setGspcInfo] = useState({ price: null, changePct: null })
+  const [heatmapLastUpdated, setHeatmapLastUpdated] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false)
+  const [candleOpenRequest, setCandleOpenRequest] = useState(null)
+  const searchRef = useRef(null)
+  const dataRef = useRef([])
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  const formatSignedPercent = (value) => {
+    if (value == null || Number.isNaN(Number(value))) return '-'
+    const numeric = Number(value)
+    return `${numeric > 0 ? '+' : ''}${numeric.toFixed(2)}%`
+  }
 
   const selectedHeatMapItem = useMemo(() => {
     if (!selectedSymbol) return null
@@ -217,26 +123,91 @@ export default function App() {
   const sidebarData = useMemo(() => {
     if (!selectedSymbol) return null
     const item = selectedHeatMapItem || {}
+    const normalizedSymbol = String(selectedSymbol).trim().toUpperCase()
+    const inferredSector = normalizedSymbol.startsWith('^') ? 'Index' : '-'
     const currentPrice = item.currentPrice ?? item.current_price ?? currentInfo?.price ?? null
     const changePercent = item.changePercent ?? item.change_percent ?? currentInfo?.changePct ?? null
     return {
       symbol: selectedSymbol,
-      security: item.security ?? item.shortName ?? '-',
-      sector: item.gicsSector ?? item.gics_sector ?? item.sector ?? '-',
+      security: item.security ?? item.shortName ?? currentInfo?.security ?? '-',
+      sector: item.gicsSector ?? item.gics_sector ?? item.sector ?? currentInfo?.sector ?? inferredSector,
       currentPrice,
       changePercent,
-      marketCap: item.marketCap ?? item.market_cap ?? null,
-      volume: item.volume ?? null,
-      dayHigh: item.regularMarketDayHigh ?? item.regular_market_day_high ?? null,
-      dayLow: item.regularMarketDayLow ?? item.regular_market_day_low ?? null
+      marketCap: item.marketCap ?? item.market_cap ?? currentInfo?.marketCap ?? null,
+      volume: item.volume ?? currentInfo?.volume ?? null,
+      dayHigh: item.regularMarketDayHigh ?? item.regular_market_day_high ?? currentInfo?.dayHigh ?? null,
+      dayLow: item.regularMarketDayLow ?? item.regular_market_day_low ?? currentInfo?.dayLow ?? null
     }
   }, [selectedSymbol, selectedHeatMapItem, currentInfo])
 
-  const quoteToneClass = (() => {
-    const numeric = Number(sidebarData?.changePercent)
-    if (!Number.isFinite(numeric) || numeric === 0) return 'quote-neutral'
-    return numeric > 0 ? 'quote-up' : 'quote-down'
-  })()
+  const searchableStocks = useMemo(() => {
+    const stockMap = new Map()
+    for (const item of data) {
+      const symbol = String(item?.symbol || '').trim().toUpperCase()
+      if (!symbol) continue
+      if (!stockMap.has(symbol)) {
+        stockMap.set(symbol, {
+          symbol,
+          security: String(item?.security || item?.shortName || '').trim()
+        })
+      }
+    }
+    return Array.from(stockMap.values())
+  }, [data])
+
+  const searchSuggestions = useMemo(() => {
+    const query = String(searchTerm || '').trim().toUpperCase()
+    if (!query) return []
+
+    const ranked = searchableStocks
+      .map((item) => {
+        const symbol = item.symbol
+        const securityUpper = String(item.security || '').toUpperCase()
+        const symbolStarts = symbol.startsWith(query)
+        const symbolIncludes = !symbolStarts && symbol.includes(query)
+        const securityIncludes = !symbolStarts && !symbolIncludes && securityUpper.includes(query)
+
+        let score = 99
+        if (symbolStarts) score = 0
+        else if (symbolIncludes) score = 1
+        else if (securityIncludes) score = 2
+
+        return {
+          ...item,
+          score
+        }
+      })
+      .filter((item) => item.score < 99)
+      .sort((left, right) => {
+        if (left.score !== right.score) return left.score - right.score
+        return left.symbol.localeCompare(right.symbol)
+      })
+
+    return ranked.slice(0, 5)
+  }, [searchTerm, searchableStocks])
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (!searchRef.current) return
+      if (!searchRef.current.contains(event.target)) {
+        setShowSearchDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
+    }
+  }, [])
+
+  const openSymbolCandlestick = (symbol) => {
+    const normalized = String(symbol || '').trim().toUpperCase()
+    if (!normalized) return
+    setSelectedSymbol(normalized)
+    setCandleOpenRequest({ symbol: normalized, nonce: Date.now() })
+    setSearchTerm(normalized)
+    setShowSearchDropdown(false)
+  }
 
   useEffect(() => {
     if (!selectedSymbol) {
@@ -259,9 +230,54 @@ export default function App() {
         if (!mounted) return
 
         const realData = realRes && realRes.data ? realRes.data : null
-        const parsedReal = realData ? (
-          typeof realData === 'object' ? ({ price: realData.price || realData.currentPrice || realData.last || null, changePct: realData.changePercent != null ? Number(realData.changePercent) : (realData.change != null ? Number(realData.change) : null) }) : null
-        ) : null
+        const parsedReal = realData && typeof realData === 'object'
+          ? (() => {
+              const firstQuote = realData?.quoteResponse?.result?.[0] ?? null
+              const rawPrice = realData.price
+                ?? realData.currentPrice
+                ?? realData.last
+                ?? firstQuote?.regularMarketPrice
+                ?? firstQuote?.postMarketPrice
+                ?? null
+              const rawChangePct = realData.changePercent
+                ?? realData.change
+                ?? firstQuote?.regularMarketChangePercent
+                ?? firstQuote?.postMarketChangePercent
+                ?? null
+              const rawVolume = realData.volume
+                ?? firstQuote?.regularMarketVolume
+                ?? null
+              const rawDayHigh = realData.dayHigh
+                ?? realData.regularMarketDayHigh
+                ?? firstQuote?.regularMarketDayHigh
+                ?? null
+              const rawDayLow = realData.dayLow
+                ?? realData.regularMarketDayLow
+                ?? firstQuote?.regularMarketDayLow
+                ?? null
+              const rawMarketCap = realData.marketCap
+                ?? firstQuote?.marketCap
+                ?? null
+              const security = realData.security
+                ?? realData.shortName
+                ?? firstQuote?.shortName
+                ?? firstQuote?.longName
+                ?? null
+              const sector = realData.sector
+                ?? firstQuote?.sector
+                ?? null
+              return {
+                price: rawPrice != null && Number.isFinite(Number(rawPrice)) ? Number(rawPrice) : null,
+                changePct: rawChangePct != null && Number.isFinite(Number(rawChangePct)) ? Number(rawChangePct) : null,
+                volume: rawVolume != null && Number.isFinite(Number(rawVolume)) ? Number(rawVolume) : null,
+                dayHigh: rawDayHigh != null && Number.isFinite(Number(rawDayHigh)) ? Number(rawDayHigh) : null,
+                dayLow: rawDayLow != null && Number.isFinite(Number(rawDayLow)) ? Number(rawDayLow) : null,
+                marketCap: rawMarketCap != null && Number.isFinite(Number(rawMarketCap)) ? Number(rawMarketCap) : null,
+                security,
+                sector
+              }
+            })()
+          : null
         if (parsedReal) setCurrentInfo(parsedReal)
 
         let seriesPayload = normalizeSeriesPayload(seriesRes && seriesRes.data ? seriesRes.data : [])
@@ -289,7 +305,7 @@ export default function App() {
         console.warn('chart fetch err', err)
         if (mounted) {
           setChartSeries([])
-          const fallback = data.find(d => d.symbol === selectedSymbol) || null
+          const fallback = dataRef.current.find((item) => item.symbol === sym) || null
           if (fallback) setCurrentInfo({ price: fallback.currentPrice || fallback.price, changePct: fallback.changePercent })
         }
       } finally {
@@ -299,10 +315,54 @@ export default function App() {
 
     fetchChartFor(selectedSymbol)
     return () => { mounted = false }
-  }, [selectedSymbol, data])
+  }, [selectedSymbol])
+
   useEffect(() => {
     let mounted = true
-    async function fetchData() {
+
+    async function fetchGspc() {
+      try {
+        const response = await axios.get(`/realTimeStock?symbol=${encodeURIComponent('^GSPC')}`)
+        const payload = response?.data
+        if (!mounted || !payload || typeof payload !== 'object') return
+
+        const firstQuote = payload?.quoteResponse?.result?.[0] ?? null
+
+        const rawPrice = payload.price
+          ?? payload.currentPrice
+          ?? payload.last
+          ?? firstQuote?.regularMarketPrice
+          ?? firstQuote?.postMarketPrice
+          ?? null
+
+        const rawChangePct = payload.changePercent
+          ?? payload.change
+          ?? firstQuote?.regularMarketChangePercent
+          ?? firstQuote?.postMarketChangePercent
+          ?? null
+
+        const price = rawPrice != null && Number.isFinite(Number(rawPrice)) ? Number(rawPrice) : null
+        const changePct = rawChangePct != null && Number.isFinite(Number(rawChangePct)) ? Number(rawChangePct) : null
+
+        setGspcInfo({ price, changePct })
+      } catch (error) {
+        if (mounted) {
+          setGspcInfo({ price: null, changePct: null })
+        }
+      }
+    }
+
+    fetchGspc()
+    const timer = setInterval(fetchGspc, 60_000)
+    return () => {
+      mounted = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    async function fetchData(isInitial = false) {
       try {
         const res = await axios.get('/heatMapData')
         let payload = res && res.data
@@ -312,22 +372,34 @@ export default function App() {
           else if (payload && Array.isArray(payload.heatmapData)) payload = payload.heatmapData
           else payload = []
         }
-        if (mounted) setData(payload)
+        if (mounted) {
+          setData(payload)
+          setHeatmapLastUpdated(new Date())
+        }
       } catch (e) {
-        // fallback sample data
-        if (mounted) setData([
-          { symbol: 'AAPL', marketCap: 3000000000000, volume: 300, changePercent: 1.2, currentPrice: 172 },
-          { symbol: 'MSFT', marketCap: 2800000000000, volume: 220, changePercent: -0.8, currentPrice: 310 },
-          { symbol: 'GOOG', marketCap: 2000000000000, volume: 180, changePercent: 0.4, currentPrice: 125 },
-          { symbol: 'AMZN', marketCap: 1900000000000, volume: 140, changePercent: -2.1, currentPrice: 98 },
-          { symbol: 'TSLA', marketCap: 900000000000, volume: 260, changePercent: 3.5, currentPrice: 720 }
-        ])
+        if (isInitial && mounted) {
+          setData([
+            { symbol: 'AAPL', marketCap: 3000000000000, volume: 300, changePercent: 1.2, currentPrice: 172 },
+            { symbol: 'MSFT', marketCap: 2800000000000, volume: 220, changePercent: -0.8, currentPrice: 310 },
+            { symbol: 'GOOG', marketCap: 2000000000000, volume: 180, changePercent: 0.4, currentPrice: 125 },
+            { symbol: 'AMZN', marketCap: 1900000000000, volume: 140, changePercent: -2.1, currentPrice: 98 },
+            { symbol: 'TSLA', marketCap: 900000000000, volume: 260, changePercent: 3.5, currentPrice: 720 }
+          ])
+        }
       } finally {
-        if (mounted) setLoading(false)
+        if (isInitial && mounted) setLoading(false)
       }
     }
-    fetchData()
-    return () => { mounted = false }
+
+    fetchData(true)
+    const timer = setInterval(() => {
+      fetchData(false)
+    }, 5000)
+
+    return () => {
+      mounted = false
+      clearInterval(timer)
+    }
   }, [])
 
   return (
@@ -337,7 +409,68 @@ export default function App() {
       </header>
 
       <div className="toolbar">
-        <div className="toolbar-inner">工具列 / 控制區（可放選單、按鈕）</div>
+        <div className="toolbar-inner">
+          <div className="toolbar-left">
+            <div
+              className="toolbar-index-box"
+              role="button"
+              tabIndex={0}
+              aria-label="Show SP500 details"
+              onClick={() => setSelectedSymbol('^GSPC')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setSelectedSymbol('^GSPC')
+                }
+              }}
+            >
+              <span className="toolbar-index-symbol">SP500:</span>
+              <span className={`toolbar-index-price ${gspcInfo.changePct > 0 ? 'quote-up' : (gspcInfo.changePct < 0 ? 'quote-down' : '')}`}>{gspcInfo.price != null ? Number(gspcInfo.price).toFixed(2) : '-'}</span>
+              <span className={`toolbar-index-change ${gspcInfo.changePct > 0 ? 'quote-up' : (gspcInfo.changePct < 0 ? 'quote-down' : '')}`}>
+                {formatSignedPercent(gspcInfo.changePct)}
+              </span>
+            </div>
+          </div>
+
+          <div className="toolbar-search" ref={searchRef}>
+            <input
+              className="toolbar-search-input"
+              type="text"
+              value={searchTerm}
+              placeholder="Search symbol..."
+              onFocus={() => setShowSearchDropdown(true)}
+              onChange={(event) => {
+                setSearchTerm(event.target.value)
+                setShowSearchDropdown(true)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  const first = searchSuggestions[0]
+                  if (first?.symbol) {
+                    openSymbolCandlestick(first.symbol)
+                  }
+                }
+              }}
+            />
+
+            {showSearchDropdown && searchSuggestions.length > 0 && (
+              <div className="toolbar-search-menu" role="listbox" aria-label="Stock search suggestions">
+                {searchSuggestions.map((item) => (
+                  <button
+                    key={item.symbol}
+                    type="button"
+                    className="toolbar-search-item"
+                    onClick={() => openSymbolCandlestick(item.symbol)}
+                  >
+                    <span className="toolbar-search-item-symbol">{item.symbol}</span>
+                    <span className="toolbar-search-item-name">{item.security || ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <main className="main">
@@ -345,52 +478,29 @@ export default function App() {
           {loading ? (
             <div className="heatmap-inner">Loading...</div>
           ) : (
-            <Treemap data={data} groupOutlineInset={1} groupOutlineWidth={2} onSelectSymbol={setSelectedSymbol} />
+            <Treemap
+              data={data}
+              groupOutlineInset={1}
+              groupOutlineWidth={2}
+              onSelectSymbol={setSelectedSymbol}
+              externalCandleRequest={candleOpenRequest}
+            />
           )}
         </section>
 
-        <aside className="sidebar" aria-label="Sidebar">
-          <div className="sidebar-inner">
-            {!selectedSymbol ? (
-              <div className="sidebar-empty">Select a stock from heatmap</div>
-            ) : (
-              <>
-                <section className="sidebar-card stock-frame">
-                  <div className="stock-top">
-                    <div className="stock-sector-top">{sidebarData?.sector || '-'}</div>
-                    <div />
-                    <div className="stock-symbol-top">{sidebarData?.symbol || '-'}</div>
-                    <div className={`stock-price-top ${quoteToneClass}`}>{sidebarData?.currentPrice != null ? Number(sidebarData.currentPrice).toFixed(2) : '-'}</div>
-                    <div className="stock-security-top">{sidebarData?.security || '-'}</div>
-                    <div className={`stock-change-top ${quoteToneClass}`}>{formatSignedPercent(sidebarData?.changePercent)}</div>
-                  </div>
-
-                  <div className="stock-metrics-grid">
-                    <div className="stock-label">Market Cap</div><div className="stock-value">{sidebarData?.marketCap != null ? formatMillions(sidebarData.marketCap) : '-'}</div>
-                    <div className="stock-label">Volume</div><div className="stock-value">{sidebarData?.volume != null ? numberFormatter.format(Number(sidebarData.volume)) : '-'}</div>
-                    <div className="stock-label">Day High</div><div className="stock-value">{sidebarData?.dayHigh != null ? Number(sidebarData.dayHigh).toFixed(2) : '-'}</div>
-                    <div className="stock-label">Day Low</div><div className="stock-value">{sidebarData?.dayLow != null ? Number(sidebarData.dayLow).toFixed(2) : '-'}</div>
-                  </div>
-                </section>
-
-                <section className="sidebar-card trend-frame">
-                  <StockTrendChart series={chartSeries} loading={chartLoading} />
-                </section>
-
-                <section className="sidebar-card news-frame">
-                  <div className="sidebar-subtitle">Stock News (Top 5)</div>
-                  <ul className="news-placeholder-list">
-                    {NEWS_PLACEHOLDERS.map((item, index) => (
-                      <li key={`news_${index}`} className="news-placeholder-item">{item}</li>
-                    ))}
-                  </ul>
-                </section>
-              </>
-            )}
-          </div>
-        </aside>
+        <Sidebar
+          selectedSymbol={selectedSymbol}
+          onSelectSymbol={setSelectedSymbol}
+          sidebarData={sidebarData}
+          chartSeries={chartSeries}
+          chartLoading={chartLoading}
+        />
 
       </main>
+
+      <div className="app-heatmap-updated" aria-live="polite">
+        Data Updated: {heatmapLastUpdated ? heatmapLastUpdated.toLocaleTimeString() : '-'}
+      </div>
     </div>
   )
 }

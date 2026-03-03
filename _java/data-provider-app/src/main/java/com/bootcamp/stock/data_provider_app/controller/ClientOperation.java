@@ -14,4 +14,7 @@ public interface ClientOperation {
   
   @GetMapping("/recent30Data")
   List<StockDataEntity> getRecent30DataEntity(@RequestParam String symbol, @RequestParam String interval);
+
+  @GetMapping("/stockdata")
+  List<StockDataEntity> getSymbolAndInterval(@RequestParam String symbol, @RequestParam String interval);
 }
