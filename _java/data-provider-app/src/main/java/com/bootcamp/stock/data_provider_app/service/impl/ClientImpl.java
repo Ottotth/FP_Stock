@@ -1,8 +1,11 @@
 package com.bootcamp.stock.data_provider_app.service.impl;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
@@ -19,10 +22,24 @@ public class ClientImpl implements ClientService {
   @Autowired
   private HeatMapRepository heatMapRepository;
 
+  @Autowired
+  private RedisManager redisManager;
+
   @Override
   public List<StockDataEntity> getRecent30DataEntity(String symbol,
       String interval) {
-    return stockDataRepository.findRecent30DataEntity(symbol, interval);
+    String cacheKey = "recent30_" + symbol + "_" + interval;
+    StockDataEntity[] cachedData =
+        redisManager.get(cacheKey, StockDataEntity[].class);
+    if (cachedData != null) {
+      return Arrays.asList(cachedData);
+    }
+
+    List<StockDataEntity> entities =
+        stockDataRepository.findRecent30DataEntity(symbol, interval);
+    redisManager.set(cacheKey, entities.toArray(StockDataEntity[]::new),
+        Duration.ofMinutes(2));
+    return entities;
   }
 
     @Override

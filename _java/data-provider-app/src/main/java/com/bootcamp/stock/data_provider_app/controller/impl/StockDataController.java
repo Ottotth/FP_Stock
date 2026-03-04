@@ -13,7 +13,7 @@ import com.bootcamp.stock.data_provider_app.model.dto.StockChartDTO;
 import com.bootcamp.stock.data_provider_app.service.StockDataService;
 
 @RestController
-public class StockDataImpl implements StockDataOperation {
+public class StockDataController implements StockDataOperation {
 
   @Autowired
   private StockDataService stockDataService;

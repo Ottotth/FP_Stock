@@ -20,13 +20,13 @@ import lombok.Setter;
 @NoArgsConstructor
 public class StockDataEntity {
   @Id
-  @Column(name = "id" , unique = true, nullable = false)
+  @Column(name = "id" ,nullable = false, unique = true , length = 64)
   private Long id;
 
-  @Column(name = "symbol")
+  @Column(name = "symbol" , nullable = false , length = 8)
   private String symbol;
 
-  @Column(name = "interval")
+  @Column(name = "interval", length = 4)
   private String interval;
 
   @Column(name = "date_time")
