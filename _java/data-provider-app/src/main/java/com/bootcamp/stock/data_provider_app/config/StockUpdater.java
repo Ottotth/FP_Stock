@@ -40,6 +40,7 @@ public class StockUpdater {
 		for (String symbol : symbols) {
 			for (Interval interval : Interval.values()) {
 				try {
+					System.out.println("Updating old data for symbol: " + symbol + ", interval: " + interval);
 					switch (interval) {
 						case ONE_MINUTE:
 							stockDataService.getOldStockData(symbol, interval.getValue(), 7); // Example: 7 days

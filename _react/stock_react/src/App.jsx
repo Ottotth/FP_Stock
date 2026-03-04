@@ -394,7 +394,7 @@ export default function App() {
     fetchData(true)
     const timer = setInterval(() => {
       fetchData(false)
-    }, 5000)
+    }, 3000)
 
     return () => {
       mounted = false

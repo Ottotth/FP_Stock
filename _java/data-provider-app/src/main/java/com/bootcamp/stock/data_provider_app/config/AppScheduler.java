@@ -35,8 +35,8 @@ public class AppScheduler {
 		stockUpdater.updateOldData();
 	}
 
-	// run after finsh runing ownload the heat map data every 5s in weekday
-	@Scheduled(fixedDelay = 5000, zone = "America/New_York")
+	// run after finsh runing ownload the heat map data every 3s in weekday
+	@Scheduled(fixedDelay = 3000, zone = "America/New_York")
 	public void updateHeatMapData() {
 		ZonedDateTime now = ZonedDateTime.now(ZoneId.of("America/New_York"));
 		DayOfWeek dayOfWeek = now.getDayOfWeek();
