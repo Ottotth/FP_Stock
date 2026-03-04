@@ -1,13 +1,7 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import StockTrendChart from './StockTrendChart'
 
-const NEWS_PLACEHOLDERS = [
-  'News slot 1',
-  'News slot 2',
-  'News slot 3',
-  'News slot 4',
-  'News slot 5'
-]
+const NEWS_LIMIT = 5
 
 const numberFormatter = new Intl.NumberFormat('en-US')
 
@@ -27,11 +21,85 @@ function formatMillions(value) {
 }
 
 export default function Sidebar({ selectedSymbol, onSelectSymbol, sidebarData, chartSeries, chartLoading }) {
+  const [newsItems, setNewsItems] = useState([])
+  const [newsLoading, setNewsLoading] = useState(false)
+
   useEffect(() => {
     if (!selectedSymbol && typeof onSelectSymbol === 'function') {
       onSelectSymbol('^GSPC')
     }
   }, [selectedSymbol, onSelectSymbol])
+
+  useEffect(() => {
+    const symbol = String(selectedSymbol || '').trim().toUpperCase()
+    if (!symbol) {
+      setNewsItems([])
+      setNewsLoading(false)
+      return
+    }
+
+    let active = true
+    const controller = new AbortController()
+
+    async function fetchNews() {
+      setNewsLoading(true)
+      try {
+        const response = await fetch(
+          `/stockNews?symbol=${encodeURIComponent(symbol)}&newsCount=${NEWS_LIMIT}`,
+          { signal: controller.signal }
+        )
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        const payload = await response.json()
+        const list = Array.isArray(payload?.news) ? payload.news : []
+        const normalized = list
+          .map((item) => ({
+            uuid: item?.uuid || `${item?.link || ''}_${item?.title || ''}`,
+            title: item?.title || '-',
+            link: item?.link || null
+          }))
+          .filter((item) => item.title && item.title !== '-')
+          .slice(0, NEWS_LIMIT)
+
+        if (active) setNewsItems(normalized)
+      } catch (error) {
+        if (error?.name !== 'AbortError' && active) {
+          setNewsItems([])
+        }
+      } finally {
+        if (active) setNewsLoading(false)
+      }
+    }
+
+    fetchNews()
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [selectedSymbol])
+
+  const newsDisplayItems = useMemo(() => {
+    if (newsLoading) {
+      return Array.from({ length: NEWS_LIMIT }, (_, index) => ({
+        uuid: `loading_${index}`,
+        title: 'Loading news...',
+        link: null
+      }))
+    }
+
+    const normalized = newsItems.slice(0, NEWS_LIMIT)
+    if (normalized.length < NEWS_LIMIT) {
+      for (let index = normalized.length; index < NEWS_LIMIT; index++) {
+        normalized.push({
+          uuid: `empty_${index}`,
+          title: 'No news available',
+          link: null
+        })
+      }
+    }
+    return normalized
+  }, [newsItems, newsLoading])
 
   const quoteToneClass = (() => {
     const numeric = Number(sidebarData?.changePercent)
@@ -69,10 +137,24 @@ export default function Sidebar({ selectedSymbol, onSelectSymbol, sidebarData, c
             </section>
 
             <section className="sidebar-card news-frame">
-              <div className="sidebar-subtitle">Stock News (Top 5)</div>
+              <div className="sidebar-subtitle">Stock News</div>
               <ul className="news-placeholder-list">
-                {NEWS_PLACEHOLDERS.map((item, index) => (
-                  <li key={`news_${index}`} className="news-placeholder-item">{item}</li>
+                {newsDisplayItems.map((item) => (
+                  <li key={item.uuid} className="news-placeholder-item" title={item.title}>
+                    {item.link ? (
+                      <a
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="news-link"
+                        title={item.title}
+                      >
+                        {item.title}
+                      </a>
+                    ) : (
+                      <span className="news-text" title={item.title}>{item.title}</span>
+                    )}
+                  </li>
                 ))}
               </ul>
             </section>
