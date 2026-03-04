@@ -21,7 +21,7 @@ import lombok.ToString;
 @ToString
 public class HeatMapEntity {
   @Id
-  @Column (unique = true , nullable = false)
+  @Column (unique = true , nullable = false , length = 8)
   private String symbol;
 
   private double currentPrice;

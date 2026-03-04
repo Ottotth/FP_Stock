@@ -17,16 +17,16 @@ import lombok.Setter;
 @NoArgsConstructor
 public class SPListEntity {
   @Id
-  @Column(name = "symbol", nullable = false, unique = true)
+  @Column(name = "symbol", nullable = false, unique = true , length = 24)
   private String symbol;
 
-  @Column(name = "security", nullable = false)
+  @Column(name = "security", nullable = false, length = 128)
   private String security;
 
-  @Column(name = "gics_sector", nullable = false)
+  @Column(name = "gics_sector", nullable = false, length = 64)
   private String gicsSector;
 
-  @Column(name = "headquarters_location")
+  @Column(name = "headquarters_location", length = 128)
   private String headquartersLocation;
 
 

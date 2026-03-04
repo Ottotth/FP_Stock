@@ -23,14 +23,14 @@ public class AppScheduler {
 
 	private final AtomicBoolean running = new AtomicBoolean(false);
 
-	// run in weekday 06:00 UTC
-	@Scheduled(cron = "0 0 6 ? * MON-FRI", zone = "UTC")
-	public void updateAt0600UTC() {
+	// run in weekday 00:00 UTC
+	@Scheduled(cron = "0 0 0 ? * MON-FRI", zone = "UTC")
+	public void updateAt0000UTC() {
 		stockUpdater.updateAllStockData();
 	}
 
 	
-	@Scheduled(cron = "0 0 7 ? * MON-FRI", zone = "UTC")
+	@Scheduled(cron = "0 0 1 ? * MON-FRI", zone = "UTC")
 	public void removeOldData() {
 		stockUpdater.updateOldData();
 	}

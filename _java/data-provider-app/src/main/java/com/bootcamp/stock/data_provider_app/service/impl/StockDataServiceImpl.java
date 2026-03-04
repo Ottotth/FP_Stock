@@ -133,7 +133,8 @@ public class StockDataServiceImpl implements StockDataService {
       return null;
     }
 
-    List<StockDataEntity> newEntities = entityMapper.toStockDataEntityList(stockChartDTO);
+    List<StockDataEntity> newEntities =
+      entityMapper.toStockDataEntityList(stockChartDTO, interval);
 
     if (newEntities != null && !newEntities.isEmpty()) {
       // Collect ids and fetch existing entities in a single query to avoid N+1 selects
