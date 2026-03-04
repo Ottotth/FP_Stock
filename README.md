@@ -6,5 +6,6 @@
 -- Scheduler: In Weekday 06:00 UTC update all stock data
               In Weekday 07:00 UTC move the old Stock Data to other Table
 -- Read the Real-time Stock Data
+-- Update Realtime data for HeatMap
 -- Get all Realtime data for HeatMap
 

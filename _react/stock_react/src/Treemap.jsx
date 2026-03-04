@@ -20,6 +20,10 @@ function colorFor(change) {
   return `hsl(0, ${saturation}%, ${lightness}%)`
 }
 
+function logoUrlFor(symbol) {
+  return `https://api.elbstream.com/logos/symbol/${encodeURIComponent(String(symbol || '').trim().toUpperCase())}`
+}
+
 export default function Treemap({ data = [], width = 1000, height = 600, padding = 2, maxRatio = 1.5, valueExponent = 1, capEnabled = false, capPercentile = 99, scaleMode = 'linear', layoutMode = 'treemap', gridDesired = 24, topPercentile = 0, topExtraCells = 0, gridAllocExponent = 1, sectorHeaderHeight = 16, tileStrokeColor = '#000', tileHoverStrokeColor = '#0b63ff', tileHoverStrokeWidth = 1.6, groupOutlineColor = '#000000', groupHeaderColor = '#000000', tileTextColor = '#fff', headerTextColor = '#fff', groupCornerRadius = 4, groupOutlineInset = 1, groupOutlineWidth = 1, onSelectSymbol = () => {}, externalCandleRequest = null}) {
   // data: 陣列，格式範例 { symbol, marketCap, changePercent }
   const containerRef = useRef(null)
@@ -452,13 +456,13 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
                   const w = Math.max(0, pb.x1 - pb.x0)
                   const h = Math.max(0, pb.y1 - pb.y0)
                   if (w === 0 || h === 0) return null
-                  const showFull = w >= 50 && h >= 36
+                  const showFull = w >= 66 && h >= 50
+                  const showLogoOnly = !showFull && w >= 20 && h >= 16
                   const pad = 6
                   const innerW = Math.max(0, w - pad * 2)
                   const innerH = Math.max(0, h - pad * 2)
-                  const titleSize = Math.max(10, Math.min(28, Math.floor(Math.max(6, Math.min(innerW, innerH)) * 0.22)))
-                  const pctSize = Math.max(9, Math.min(18, Math.floor(Math.max(6, Math.min(innerW, innerH)) * 0.12)))
-                  const smallLetterSize = Math.max(8, Math.floor(Math.max(6, Math.min(innerW, innerH)) * 0.18))
+                  const titleSize = Math.max(9, Math.min(22, Math.floor(Math.max(6, Math.min(innerW, innerH)) * 0.18)))
+                  const pctSize = Math.max(8, Math.min(14, Math.floor(Math.max(6, Math.min(innerW, innerH)) * 0.1)))
                   const cx = pb.x0 + w / 2
                   const cy = pb.y0 + h / 2
                   const pct = b.change != null && isFinite(Number(b.change)) ? (Number(b.change) > 0 ? `+${Number(b.change).toFixed(2)}%` : `${Number(b.change).toFixed(2)}%`) : ''
@@ -511,12 +515,97 @@ export default function Treemap({ data = [], width = 1000, height = 600, padding
                       })()}
                       {showFull ? (
                         <>
-                          <text x={cx} y={cy - (titleSize * 0.15)} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontWeight={800} fontSize={`${titleSize}px`}>{sym}</text>
-                          {pct && <text x={cx} y={cy + (titleSize * 0.9)} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={`${pctSize}px`} opacity={0.95}>{pct}</text>}
+                          {(() => {
+                            const logoSize = Math.max(22, Math.min(44, Math.floor(Math.min(w, h) * 0.34)))
+                            const hasPct = Boolean(pct)
+                            const gapLogoToSymbol = Math.max(4, Math.floor(titleSize * 0.35))
+                            const gapSymbolToPct = Math.max(3, Math.floor(pctSize * 0.35))
+                            const blockHeight = logoSize
+                              + gapLogoToSymbol
+                              + titleSize
+                              + (hasPct ? (gapSymbolToPct + pctSize) : 0)
+                            const blockTop = cy - (blockHeight / 2)
+
+                            const symbolY = blockTop + logoSize + gapLogoToSymbol + (titleSize / 2)
+                            const logoCenterX = cx
+                            const logoCenterY = blockTop + (logoSize / 2)
+                            const pctY = hasPct
+                              ? (symbolY + (titleSize / 2) + gapSymbolToPct + (pctSize / 2))
+                              : null
+                            const imageSize = logoSize * 1
+                            const logoX = logoCenterX - imageSize / 2
+                            const logoY = logoCenterY - imageSize / 2
+                            const clipId = `logoClip_${sym}_${i}`
+                            return (
+                              <>
+                                <defs>
+                                  <clipPath id={clipId}>
+                                    <circle cx={logoCenterX} cy={logoCenterY} r={logoSize / 2} />
+                                  </clipPath>
+                                </defs>
+                                <circle
+                                  cx={logoCenterX}
+                                  cy={logoCenterY}
+                                  r={logoSize / 2}
+                                  fill="rgba(8, 16, 30, 0.95)"
+                                  pointerEvents="none"
+                                />
+                                <image
+                                  href={logoUrlFor(sym)}
+                                  x={logoX}
+                                  y={logoY}
+                                  width={imageSize}
+                                  height={imageSize}
+                                  preserveAspectRatio="xMidYMid meet"
+                                  opacity={0.98}
+                                  clipPath={`url(#${clipId})`}
+                                  pointerEvents="none"
+                                />
+
+                                <text x={cx} y={symbolY} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontWeight={800} fontSize={`${titleSize}px`}>{sym}</text>
+                                {hasPct && <text x={cx} y={pctY} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={`${pctSize}px`} opacity={0.95}>{pct}</text>}
+                              </>
+                            )
+                          })()}
                         </>
                       ) : (
-                        innerW >= 10 && innerH >= 10 ? (
-                          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontWeight={700} fontSize={`${smallLetterSize}px`}>{sym.charAt(0)}</text>
+                        showLogoOnly ? (
+                          (() => {
+                            const logoSize = Math.max(16, Math.min(30, Math.floor(Math.min(w, h) * 0.58)))
+                            const imageSize = logoSize * 1
+                            const logoCenterX = cx
+                            const logoCenterY = cy
+                            const logoX = logoCenterX - imageSize / 2
+                            const logoY = logoCenterY - imageSize / 2
+                            const clipId = `logoClipSmall_${sym}_${i}`
+                            return (
+                              <>
+                                <defs>
+                                  <clipPath id={clipId}>
+                                    <circle cx={logoCenterX} cy={logoCenterY} r={logoSize / 2} />
+                                  </clipPath>
+                                </defs>
+                                <circle
+                                  cx={logoCenterX}
+                                  cy={logoCenterY}
+                                  r={logoSize / 2}
+                                  fill="rgba(8, 16, 30, 0.95)"
+                                  pointerEvents="none"
+                                />
+                                <image
+                                  href={logoUrlFor(sym)}
+                                  x={logoX}
+                                  y={logoY}
+                                  width={imageSize}
+                                  height={imageSize}
+                                  preserveAspectRatio="xMidYMid meet"
+                                  opacity={0.98}
+                                  clipPath={`url(#${clipId})`}
+                                  pointerEvents="none"
+                                />
+                              </>
+                            )
+                          })()
                         ) : null
                       )}
                     </g>
