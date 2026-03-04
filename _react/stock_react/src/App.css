@@ -311,6 +311,7 @@ li { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); color: var
 .sidebar {
 	width: 360px;
 	flex: 0 0 360px;
+	min-width: 0;
 	background: var(--sidebar-bg);
 	border: 1px solid var(--sidebar-border);
 	display: flex;
@@ -529,6 +530,39 @@ li { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); color: var
 	font-size: 0.8rem;
 	color: var(--muted);
 	border: 1px dashed rgba(255,255,255,0.2);
+	height: 16px;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+}
+
+.news-link {
+	color: var(--fg);
+	text-decoration: none;
+	width: 100%;
+	display: block;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	overflow: hidden;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.news-link:hover {
+	text-decoration: underline;
+}
+
+.news-text {
+	color: var(--muted);
+	width: 100%;
+	display: block;
+	line-height: 1.35;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+	word-break: break-word;
 }
 
 /* Responsive: collapse sidebar under 900px */
