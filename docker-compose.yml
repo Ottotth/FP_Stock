@@ -3,9 +3,9 @@ services:
     image: postgres:15
     container_name: postgres-container
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin1234
-      POSTGRES_DB: stock_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin1234}
+      POSTGRES_DB: ${POSTGRES_DB:-stock_db}
       PGDATA: /var/lib/postgresql/data/pgdata15
     networks:
       - bootcamp-network
@@ -24,10 +24,38 @@ services:
     volumes:
       - "./redis_data:/data"
 
-  # You prepare the setup for your app.
-  # data-provider-app
-  # stock-data-app
-  # heatmap-ui-app
+  data-provider-app:
+    build:
+      context: ./_java/data-provider-app
+      dockerfile: Dockerfile
+    container_name: data-provider-app
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-stock_db}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-admin1234}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "8080:8080"
+    networks:
+      - bootcamp-network
+
+  heatmap-ui-app:
+    build:
+      context: ./_react/stock_react
+      dockerfile: Dockerfile
+    container_name: heatmap-ui-app
+    depends_on:
+      - data-provider-app
+    ports:
+      - "5173:80"
+    networks:
+      - bootcamp-network
 
 networks:
   bootcamp-network:
