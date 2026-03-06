@@ -27,6 +27,15 @@ REPO_URL="${REPO_URL:-}"
 BRANCH="${BRANCH:-main}"
 PROJECT_USER="${PROJECT_USER:-$USER}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
+DB_MIGRATION_MODE="${DB_MIGRATION_MODE:-none}"
+S3_DUMP_URI="${S3_DUMP_URI:-}"
+AWS_REGION="${AWS_REGION:-}"
+RDS_HOST="${RDS_HOST:-}"
+RDS_PORT="${RDS_PORT:-5432}"
+RDS_DB="${RDS_DB:-}"
+RDS_USER="${RDS_USER:-}"
+RDS_PASSWORD="${RDS_PASSWORD:-}"
+RESTORE_JOBS="${RESTORE_JOBS:-4}"
 
 if [[ -z "${REPO_URL}" && ! -d "${APP_DIR}/.git" ]]; then
   fail "首次部署必須提供 REPO_URL。範例：REPO_URL=https://github.com/<owner>/<repo>.git bash scripts/ec2_one_click_deploy.sh"
@@ -35,10 +44,11 @@ fi
 log "開始 EC2 一鍵部署"
 log "APP_DIR=${APP_DIR}"
 log "BRANCH=${BRANCH}"
+log "DB_MIGRATION_MODE=${DB_MIGRATION_MODE}"
 
 log "安裝系統套件與 Docker"
 sudo apt-get update -y
-sudo apt-get install -y git curl ca-certificates docker.io docker-compose-plugin
+sudo apt-get install -y git curl ca-certificates docker.io docker-compose-plugin awscli postgresql-client pv
 
 log "啟用 Docker 服務"
 sudo systemctl enable docker
@@ -77,6 +87,41 @@ fi
 
 log "停止舊容器（若存在）"
 sudo docker compose down || true
+
+if [[ "${DB_MIGRATION_MODE}" == "s3_to_rds" ]]; then
+  require_cmd aws
+  require_cmd pg_restore
+
+  [[ -n "${S3_DUMP_URI}" ]] || fail "DB_MIGRATION_MODE=s3_to_rds 時，必須提供 S3_DUMP_URI，例如 s3://my-bucket/db/stock_db.dump"
+  [[ -n "${RDS_HOST}" ]] || fail "DB_MIGRATION_MODE=s3_to_rds 時，必須提供 RDS_HOST"
+  [[ -n "${RDS_DB}" ]] || fail "DB_MIGRATION_MODE=s3_to_rds 時，必須提供 RDS_DB"
+  [[ -n "${RDS_USER}" ]] || fail "DB_MIGRATION_MODE=s3_to_rds 時，必須提供 RDS_USER"
+  [[ -n "${RDS_PASSWORD}" ]] || fail "DB_MIGRATION_MODE=s3_to_rds 時，必須提供 RDS_PASSWORD"
+
+  DUMP_FILE="/tmp/stock_db_$(date +%s).dump"
+  log "下載 dump：${S3_DUMP_URI} -> ${DUMP_FILE}"
+  if [[ -n "${AWS_REGION}" ]]; then
+    aws s3 cp "${S3_DUMP_URI}" "${DUMP_FILE}" --region "${AWS_REGION}"
+  else
+    aws s3 cp "${S3_DUMP_URI}" "${DUMP_FILE}"
+  fi
+
+  export PGPASSWORD="${RDS_PASSWORD}"
+  log "開始還原到 RDS：${RDS_HOST}:${RDS_PORT}/${RDS_DB}（jobs=${RESTORE_JOBS}）"
+  pg_restore \
+    --host "${RDS_HOST}" \
+    --port "${RDS_PORT}" \
+    --username "${RDS_USER}" \
+    --dbname "${RDS_DB}" \
+    --clean --if-exists --no-owner --no-privileges \
+    --jobs "${RESTORE_JOBS}" \
+    "${DUMP_FILE}"
+
+  log "清理暫存 dump"
+  rm -f "${DUMP_FILE}"
+  unset PGPASSWORD
+  log "S3 -> RDS 還原完成"
+fi
 
 if [[ "${SKIP_BUILD}" == "true" ]]; then
   log "啟動容器（略過 build）"
