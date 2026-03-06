@@ -56,3 +56,27 @@ APP_DIR=/opt/fp_stock BRANCH=main bash scripts/ec2_one_click_deploy.sh
 
 > 首次執行若被加入 docker 群組，請重新登入 EC2 一次，之後才可不帶 sudo 使用 docker。
 
+## EC2 部署時同步做 S3 -> RDS 還原（可選）
+
+若你已先把 `pg_dump -Fc` 的 dump 檔上傳到 S3，可在部署時一起還原到 RDS：
+
+```bash
+APP_DIR=/opt/fp_stock \
+BRANCH=main \
+DB_MIGRATION_MODE=s3_to_rds \
+S3_DUMP_URI=s3://<your-bucket>/db/stock_db.dump \
+AWS_REGION=ap-southeast-1 \
+RDS_HOST=<your-rds-endpoint> \
+RDS_PORT=5432 \
+RDS_DB=stock_db \
+RDS_USER=<your-rds-user> \
+RDS_PASSWORD='<your-rds-password>' \
+RESTORE_JOBS=4 \
+bash scripts/ec2_one_click_deploy.sh
+```
+
+說明：
+- 預設 `DB_MIGRATION_MODE=none`，不會做資料還原。
+- 設為 `s3_to_rds` 時，腳本會先下載 S3 dump 到 `/tmp`，再執行 `pg_restore`。
+- 若不想部署時還原，可先跑一般部署，之後再以同組參數單獨執行一次。
+

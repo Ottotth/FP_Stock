@@ -10,10 +10,8 @@ import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -289,36 +287,6 @@ public class StockDataServiceImpl implements StockDataService {
 
     if (aggregated.isEmpty()) {
       return;
-    }
-
-    Set<String> symbols = new HashSet<>();
-    Set<String> intervals = new HashSet<>();
-    Set<LocalDateTime> bucketStarts = new HashSet<>();
-    for (LastCandleUpsertRow row : aggregated.values()) {
-      symbols.add(row.symbol);
-      intervals.add(row.interval);
-      bucketStarts.add(row.bucketStart);
-    }
-
-    Map<String, LastCandleEntity> existingMap = lastCandleRepository
-        .findBySymbolInAndIntervalInAndBucketStartIn(symbols, intervals, bucketStarts)
-        .stream()
-        .collect(Collectors.toMap(
-            entity -> buildLastCandleKey(entity.getSymbol(), entity.getInterval(),
-                entity.getBucketStart()),
-            entity -> entity,
-            (left, right) -> left));
-
-    for (Map.Entry<String, LastCandleUpsertRow> entry : aggregated.entrySet()) {
-      LastCandleUpsertRow row = entry.getValue();
-      LastCandleEntity existing = existingMap.get(entry.getKey());
-      if (existing == null) {
-        continue;
-      }
-
-      row.open = existing.getOpen() != null ? existing.getOpen() : row.open;
-      row.high = maxNullable(existing.getHigh(), row.high);
-      row.low = minNullable(existing.getLow(), row.low);
     }
 
     batchUpsertLastCandles(aggregated.values());
