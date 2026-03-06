@@ -2,6 +2,7 @@ package com.bootcamp.stock.data_provider_app.service;
 
 import java.util.List;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
+import com.bootcamp.stock.data_provider_app.entity.LastCandleEntity;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
@@ -21,4 +22,6 @@ List<OldStockDataEntity> getOldStockData(String symbol, String interval, int day
 HeatMapDto updateHeatMapData();
 
 List<String> getAllSymbols();
+
+LastCandleEntity getLastCandle(String symbol, String interval);
 }

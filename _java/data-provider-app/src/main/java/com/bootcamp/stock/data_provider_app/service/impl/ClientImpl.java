@@ -14,11 +14,13 @@ import org.springframework.web.client.RestTemplate;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
+import com.bootcamp.stock.data_provider_app.entity.LastCandleEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.YahooNewsDTO;
 import com.bootcamp.stock.data_provider_app.repository.HeatMapRepository;
 import com.bootcamp.stock.data_provider_app.repository.StockDataRepository;
 import com.bootcamp.stock.data_provider_app.service.ClientService;
+import com.bootcamp.stock.data_provider_app.service.StockDataService;
 
 @Service
 public class ClientImpl implements ClientService {
@@ -37,6 +39,9 @@ public class ClientImpl implements ClientService {
 
   @Autowired
   private HttpEntity<String> httpEntity;
+
+  @Autowired
+  private StockDataService stockDataService;
 
   @Override
   public List<StockDataEntity> getRecent30DataEntity(String symbol,
@@ -59,6 +64,11 @@ public class ClientImpl implements ClientService {
   public HeatMapDto getHeatMapData() {
     List<HeatMapEntity> heatMapEntities = heatMapRepository.findAll();
     return HeatMapDto.builder().heatMapData(heatMapEntities).build();
+  }
+
+  @Override
+  public LastCandleEntity getLastCandle(String symbol, String interval) {
+    return stockDataService.getLastCandle(symbol, interval);
   }
 
   @Override

@@ -31,6 +31,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/lastcandle': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+      },
       '/stockNews': {
         target: 'http://localhost:8080',
         changeOrigin: true,
