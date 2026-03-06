@@ -3,21 +3,48 @@ import { hierarchy, treemap, treemapSquarify } from 'd3-hierarchy'
 import CandlestickView from './CandlestickView'
 
 function colorFor(change) {
-  // 變動以百分比表示；產生一個綠↔灰↔紅的配色，並控制明度
-  const c = Math.max(-20, Math.min(20, Number(change) || 0))
-  // 中性/零：使用適中的明度（不會太淺）
-  if (c === 0) return 'hsl(0, 0%, 60%)'
+  const c = Math.max(-3, Math.min(3, Number(change) || 0))
 
-  const intensity = Math.min(1, Math.abs(c) / 20) // 範圍 0..1
-  const saturation = Math.round(40 + intensity * 40) // 飽和度範圍 40%..80%
-  const lightness = Math.round(58 - intensity * 18) // 明度範圍 58%..40%（變動越強明度越暗）
+  const stops = [
+    { value: -3, color: '#ff2f4b' },
+    { value: -2, color: '#b91d33' },
+    { value: -1, color: '#7f1321' },
+    { value: 0, color: '#4a4d52' },
+    { value: 1, color: '#1d4631' },
+    { value: 2, color: '#0a7a3e' },
+    { value: 3, color: '#11a84f' }
+  ]
 
-  if (c > 0) {
-    // 正向：綠色色相（120）
-    return `hsl(120, ${saturation}%, ${lightness}%)`
+  const hexToRgb = (hex) => {
+    const raw = hex.replace('#', '')
+    return {
+      r: Number.parseInt(raw.slice(0, 2), 16),
+      g: Number.parseInt(raw.slice(2, 4), 16),
+      b: Number.parseInt(raw.slice(4, 6), 16)
+    }
   }
-  // 負向：紅色色相（0）
-  return `hsl(0, ${saturation}%, ${lightness}%)`
+
+  const rgbToHex = ({ r, g, b }) => {
+    const toHex = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  }
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const left = stops[i]
+    const right = stops[i + 1]
+    if (c >= left.value && c <= right.value) {
+      const t = (c - left.value) / (right.value - left.value)
+      const a = hexToRgb(left.color)
+      const b = hexToRgb(right.color)
+      return rgbToHex({
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t
+      })
+    }
+  }
+
+  return c < 0 ? stops[0].color : stops[stops.length - 1].color
 }
 
 function logoUrlFor(symbol) {

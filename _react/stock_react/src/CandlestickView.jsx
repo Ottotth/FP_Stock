@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import * as d3 from 'd3'
+import { isNyMarketOpen } from './utils/marketHours'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
@@ -25,6 +26,21 @@ const MIN_Y_SCALE_FACTOR = 0.35
 const MAX_Y_SCALE_FACTOR = 4
 const X_SCALE_DRAG_SENSITIVITY = 0.004
 const CROSSHAIR_PRICE_LABEL_WIDTH = 62
+const LAST_CANDLE_POLL_INTERVAL_MS = 3000
+
+function getNyTradingDateKey(date) {
+  if (!(date instanceof Date)) return null
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(date)
+  } catch (error) {
+    return null
+  }
+}
 
 function isSupportedInterval(interval) {
   return INTERVAL_OPTIONS.some((option) => option.value === interval)
@@ -106,6 +122,60 @@ function normalizeCandlesPayload(payload) {
   return []
 }
 
+function normalizeLastCandlePayload(payload) {
+  if (!payload || typeof payload !== 'object') return null
+  const date = parsePointDate(
+    payload.bucketStart
+    ?? payload.bucket_start
+    ?? payload.dateTime
+    ?? payload.date_time
+    ?? payload.datetime
+    ?? payload.date
+    ?? payload.time
+  )
+  if (!date) return null
+
+  const open = Number(payload.open ?? payload.openPrice ?? payload.open_price)
+  const high = Number(payload.high ?? payload.highPrice ?? payload.high_price)
+  const low = Number(payload.low ?? payload.lowPrice ?? payload.low_price)
+  const close = Number(payload.close ?? payload.closePrice ?? payload.close_price)
+
+  if (![open, high, low, close].every(Number.isFinite)) return null
+  return { date, open, high, low, close }
+}
+
+function mergeSeriesWithLastCandle(baseSeries, lastCandle) {
+  if (!Array.isArray(baseSeries)) return lastCandle ? [lastCandle] : []
+  if (!lastCandle) return baseSeries
+
+  if (baseSeries.length === 0) return [lastCandle]
+
+  const merged = [...baseSeries]
+  const targetTime = lastCandle.date.getTime()
+  const lastIndex = merged.length - 1
+  const lastTime = merged[lastIndex]?.date?.getTime?.()
+
+  if (Number.isFinite(lastTime) && lastTime === targetTime) {
+    merged[lastIndex] = lastCandle
+    return merged
+  }
+
+  const existingIndex = merged.findIndex((point) => point?.date?.getTime?.() === targetTime)
+  if (existingIndex >= 0) {
+    merged[existingIndex] = lastCandle
+    return merged
+  }
+
+  if (!Number.isFinite(lastTime) || targetTime > lastTime) {
+    merged.push(lastCandle)
+    return merged
+  }
+
+  merged.push(lastCandle)
+  merged.sort((left, right) => left.date.getTime() - right.date.getTime())
+  return merged
+}
+
 export default function CandlestickView({ symbol, width, height, onBack }) {
   const [series, setSeries] = useState([])
   const [loading, setLoading] = useState(false)
@@ -171,6 +241,13 @@ export default function CandlestickView({ symbol, width, height, onBack }) {
       try {
         const encodedSymbol = encodeURIComponent(symbol)
         const interval = selectedInterval
+
+        if (isNyMarketOpen()) {
+          await axios
+            .get(`/updateStock?symbol=${encodedSymbol}&interval=${interval}`)
+            .catch(() => null)
+        }
+
         let response = await axios.get(`/stockdata?symbol=${encodedSymbol}&interval=${interval}`).catch(() => null)
         let payload = response?.data ?? []
 
@@ -199,10 +276,19 @@ export default function CandlestickView({ symbol, width, height, onBack }) {
           .filter(Boolean)
           .sort((left, right) => left.date.getTime() - right.date.getTime())
 
+        let withLast = parsed
+        const lastCandleResponse = await axios
+          .get(`/lastcandle?symbol=${encodedSymbol}&interval=${interval}`)
+          .catch(() => null)
+        const normalizedLast = normalizeLastCandlePayload(lastCandleResponse?.data)
+        if (normalizedLast) {
+          withLast = mergeSeriesWithLastCandle(parsed, normalizedLast)
+        }
+
         if (mounted) {
-          setSeries(parsed)
-          if (parsed.length > 0) {
-            applyDefaultRange(parsed, interval)
+          setSeries(withLast)
+          if (withLast.length > 0) {
+            applyDefaultRange(withLast, interval)
           } else {
             setVisibleRange({ start: 0, end: 0 })
             setYPanOffset(0)
@@ -245,6 +331,34 @@ export default function CandlestickView({ symbol, width, height, onBack }) {
     const end = clamp(visibleRange.end, start, series.length - 1)
     return series.slice(start, end + 1)
   }, [series, visibleRange])
+
+  const currentPriceMarker = useMemo(() => {
+    if (!Array.isArray(series) || series.length === 0) return null
+
+    const latestPoint = series[series.length - 1]
+    if (!latestPoint || !Number.isFinite(latestPoint.close) || !(latestPoint.date instanceof Date)) {
+      return null
+    }
+
+    const latestDateKey = getNyTradingDateKey(latestPoint.date)
+    if (!latestDateKey) return null
+
+    const todayFirstPoint = series.find((point) => {
+      if (!(point?.date instanceof Date) || !Number.isFinite(point?.open)) return false
+      return getNyTradingDateKey(point.date) === latestDateKey
+    })
+
+    if (!todayFirstPoint || !Number.isFinite(todayFirstPoint.open)) return null
+
+    const currentPrice = Number(latestPoint.close)
+    const todayOpenPrice = Number(todayFirstPoint.open)
+    const isUpFromOpen = currentPrice >= todayOpenPrice
+
+    return {
+      price: currentPrice,
+      isUpFromOpen
+    }
+  }, [series])
 
   const isIntradayInterval = useMemo(() => {
     return ['1m', '5m', '15m', '30m', '1h', '4h'].includes(selectedInterval)
@@ -317,6 +431,33 @@ export default function CandlestickView({ symbol, width, height, onBack }) {
 
   useEffect(() => {
     setCrosshair(null)
+  }, [symbol, selectedInterval])
+
+  useEffect(() => {
+    const activeSymbol = String(symbol || '').trim()
+    if (!activeSymbol) return undefined
+
+    let mounted = true
+
+    const fetchLastCandle = async () => {
+      if (!isNyMarketOpen()) return
+      try {
+        const response = await axios.get(
+          `/lastcandle?symbol=${encodeURIComponent(activeSymbol)}&interval=${selectedInterval}`
+        )
+        const normalizedLast = normalizeLastCandlePayload(response?.data)
+        if (!normalizedLast || !mounted) return
+        setSeries((prev) => mergeSeriesWithLastCandle(prev, normalizedLast))
+      } catch (error) {
+        // ignore polling errors
+      }
+    }
+
+    const timer = setInterval(fetchLastCandle, LAST_CANDLE_POLL_INTERVAL_MS)
+    return () => {
+      mounted = false
+      clearInterval(timer)
+    }
   }, [symbol, selectedInterval])
 
   const updateCrosshairFromEvent = (event) => {
@@ -632,6 +773,51 @@ export default function CandlestickView({ symbol, width, height, onBack }) {
               </g>
             )
           })}
+
+          {currentPriceMarker && Number.isFinite(currentPriceMarker.price) && (() => {
+            const markerY = chart.yScale(currentPriceMarker.price)
+            if (!Number.isFinite(markerY) || markerY < chart.margin.top || markerY > (chart.margin.top + chart.plotHeight)) {
+              return null
+            }
+
+            const markerColor = currentPriceMarker.isUpFromOpen ? '#14b8a6' : '#ff4d5a'
+            const markerLabelX = Math.min(
+              chart.margin.left + chart.plotWidth + 2,
+              width - CROSSHAIR_PRICE_LABEL_WIDTH - 2
+            )
+
+            return (
+              <g>
+                <line
+                  x1={chart.margin.left}
+                  x2={chart.margin.left + chart.plotWidth}
+                  y1={markerY}
+                  y2={markerY}
+                  stroke={markerColor}
+                  strokeDasharray="5 5"
+                  strokeWidth="1.1"
+                />
+                <rect
+                  x={markerLabelX}
+                  y={markerY - 10}
+                  width={CROSSHAIR_PRICE_LABEL_WIDTH}
+                  height={20}
+                  rx={2}
+                  fill={markerColor}
+                />
+                <text
+                  x={markerLabelX + (CROSSHAIR_PRICE_LABEL_WIDTH / 2)}
+                  y={markerY}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="treemap-candle-axis"
+                  fill="#ffffff"
+                >
+                  {currentPriceMarker.price.toFixed(2)}
+                </text>
+              </g>
+            )
+          })()}
 
           {visibleSeries.map((point, index) => {
             const pointDate = point?.date

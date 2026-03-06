@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
+import com.bootcamp.stock.data_provider_app.entity.LastCandleEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.YahooNewsDTO;
 
@@ -18,6 +19,10 @@ public interface ClientOperation {
 
   @GetMapping("/stockdata")
   List<StockDataEntity> getSymbolAndInterval(@RequestParam String symbol, @RequestParam String interval);
+
+  @GetMapping("/lastcandle")
+  LastCandleEntity getLastCandle(@RequestParam String symbol,
+      @RequestParam String interval);
 
   @GetMapping("/stockNews")
   YahooNewsDTO getYahooNews(@RequestParam String symbol,

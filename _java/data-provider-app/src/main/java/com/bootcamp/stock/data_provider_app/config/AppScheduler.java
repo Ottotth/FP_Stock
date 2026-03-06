@@ -3,8 +3,10 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,6 +22,10 @@ public class AppScheduler {
 
 	@Autowired
 	private StockUpdater stockUpdater;
+
+	@Autowired
+	@Qualifier("heatMapTaskExecutor")
+	private Executor heatMapTaskExecutor;
 
 	private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -50,9 +56,18 @@ public class AppScheduler {
 
 		if (!running.compareAndSet(false, true)) return;
 		try {
-			stockDataService.updateHeatMapData();
-			System.out.println("Heat map data updated at " + now);
-		} finally {
+			heatMapTaskExecutor.execute(() -> {
+				try {
+					stockDataService.updateHeatMapData();
+					System.out.println("Heat map data updated at " + ZonedDateTime.now(ZoneId.of("America/New_York")));
+				} catch (Exception e) {
+					System.out.println("Heat map update failed: " + e.getMessage());
+				} finally {
+					running.set(false);
+				}
+			});
+		} catch (Exception e) {
+			System.out.println("Heat map task submit failed: " + e.getMessage());
 			running.set(false);
 		}
 	}

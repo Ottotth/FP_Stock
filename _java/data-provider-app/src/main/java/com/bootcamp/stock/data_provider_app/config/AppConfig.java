@@ -4,12 +4,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestTemplate;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import javax.sql.DataSource;
+import java.util.concurrent.Executor;
 
 @Configuration
 public class AppConfig {
@@ -51,6 +53,17 @@ public class AppConfig {
   @Bean
   public ObjectMapper objectMapper() {
     return new ObjectMapper();
+  }
+
+  @Bean(name = "heatMapTaskExecutor")
+  public Executor heatMapTaskExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(1);
+    executor.setMaxPoolSize(1);
+    executor.setQueueCapacity(50);
+    executor.setThreadNamePrefix("heatmap-worker-");
+    executor.initialize();
+    return executor;
   }
 
   

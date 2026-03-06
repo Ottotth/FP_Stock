@@ -3,6 +3,8 @@ import axios from 'axios'
 import './App.css'
 import Treemap from './Treemap'
 import Sidebar from './Sidebar'
+import { isNyMarketOpen } from './utils/marketHours'
+import logo from './images/logo.png'
 
 function extractNumericValue(point) {
   if (point == null) return null
@@ -90,6 +92,7 @@ function normalizeSeriesPayload(payload) {
 }
 
 export default function App() {
+  const POLL_INTERVAL_MS = 3000
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedSymbol, setSelectedSymbol] = useState(null)
@@ -314,13 +317,16 @@ export default function App() {
     }
 
     fetchChartFor(selectedSymbol)
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [selectedSymbol])
 
   useEffect(() => {
     let mounted = true
 
-    async function fetchGspc() {
+    async function fetchGspc(isInitial = false) {
+      if (!isInitial && !isNyMarketOpen()) return
       try {
         const response = await axios.get(`/realTimeStock?symbol=${encodeURIComponent('^GSPC')}`)
         const payload = response?.data
@@ -352,8 +358,10 @@ export default function App() {
       }
     }
 
-    fetchGspc()
-    const timer = setInterval(fetchGspc, 60_000)
+    fetchGspc(true)
+    const timer = setInterval(() => {
+      fetchGspc(false)
+    }, POLL_INTERVAL_MS)
     return () => {
       mounted = false
       clearInterval(timer)
@@ -363,6 +371,10 @@ export default function App() {
   useEffect(() => {
     let mounted = true
     async function fetchData(isInitial = false) {
+      if (!isInitial && !isNyMarketOpen()) {
+        if (isInitial && mounted) setLoading(false)
+        return
+      }
       try {
         const res = await axios.get('/heatMapData')
         let payload = res && res.data
@@ -394,7 +406,7 @@ export default function App() {
     fetchData(true)
     const timer = setInterval(() => {
       fetchData(false)
-    }, 3000)
+    }, POLL_INTERVAL_MS)
 
     return () => {
       mounted = false
@@ -405,7 +417,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>FP Stock</h1>
+        <img className="app-logo" src={logo} alt="FP Stock" />
       </header>
 
       <div className="toolbar">
