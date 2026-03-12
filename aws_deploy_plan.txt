@@ -1,0 +1,231 @@
+【目標】
+把目前的 Java (Spring Boot) 後端與 React 前端部署到 AWS，上線後不使用 Docker 與 Git，並建立生產環境所需的環境變數、資料庫與 Redis。文件描述必要步驟、建議服務與操作命令範例。
+
+假設與前提
+- 目前應用可產生單個可執行 jar（Spring Boot），前端可 build 成靜態檔（Vite → dist）。
+- 不使用 Docker / 不用 Git（以手動上傳或 S3/SSH 為主）。
+- 你有 AWS 帳號與 Route53/域名或可申請 SSL 的需求。
+
+高階架構建議（推薦）
+- 前端：S3 + CloudFront（靜態資源 CDN）
+- 後端：EC2（執行 systemd 管理的 Spring Boot jar）或 Elastic Beanstalk（可選較自動化）
+- 資料庫：RDS for PostgreSQL（取代本地容器內 Postgres）
+- Redis：ElastiCache Redis（生產用）或使用 EC2 上的 redis（非推薦）
+- TLS/SSL：使用 ACM + CloudFront / ALB 或在 Load Balancer 終止
+- 日誌/監控：CloudWatch（Logs + Alarms），備份用 RDS snapshot
+
+詳細步驟
+1) 準備（本機）
+- 在本機產生前端靜態檔：
+  cd _react/stock_react
+  npm ci
+  npm run build    → 產出 dist/
+
+- 在本機 build 後端 jar：
+  cd _java/data-provider-app
+  mvn -DskipTests clean package
+  target/data-provider-app-0.0.1-SNAPSHOT.jar
+
+- 產生 DB dump（若要遷移本地資料）：
+  pg_dump -h localhost -U <user> -F c -f stock_db_data.dump stock_db
+
+2) 建立 AWS 基礎設施（可用 Console 或 IaC）
+- 建議資源：
+  - S3 bucket（前端）
+  - CloudFront distribution（綁定 S3、設定 HTTPS）
+  - RDS PostgreSQL（選擇適當 instance 類型、storage、備份週期）
+  - ElastiCache Redis（如需要）
+  - EC2 instance（後端），建議 Amazon Linux 2 或 Ubuntu
+  - Security Groups：
+    - EC2 SG：允許 22 (SSH) 從管理 IP；允許 8080/80/443 若你直接要對外（或僅在 ALB 後面）
+    - RDS SG：允許來自 EC2/ALB 的 Postgres 連線（5432）
+    - ElastiCache SG：允許來自 EC2 的 Redis 連線（6379）
+  - IAM role：EC2 若需要存取 S3（如上傳/下載前端或 S3 作為資源），建立最小權限 role
+
+3) 前端部署（S3 + CloudFront）
+- 上傳 dist 檔案到 S3（可在本機執行）：
+  aws s3 sync _react/stock_react/dist/ s3://your-frontend-bucket/ --delete
+- 設定 S3 bucket 政策與 public-read（或使用 CloudFront + OAI），建議用 OAI 保護 S3
+- 建立 CloudFront，origin 指向 S3，設定 Default Root Object = index.html，啟用 HTTPS（使用 ACM 證書）
+- 若有自訂域名，在 Route53 建 CNAME/alias 指向 CloudFront
+
+4) 後端部署（EC2 + systemd）
+- 建立 EC2 instance，ssh 進去後準備環境：
+  sudo yum update -y   # Amazon Linux
+  sudo amazon-linux-extras install java-openjdk11 -y   # 或安裝 jdk 17/21
+  sudo yum install -y nginx (如需要 reverse proxy)
+
+- 上傳 jar 與環境檔案：
+  scp -i key.pem target/data-provider-app-0.0.1-SNAPSHOT.jar ec2-user@<EC2_IP>:/home/ec2-user/app/app.jar
+  scp -i key.pem .env ec2-user@<EC2_IP>:/home/ec2-user/app/.env
+
+- 建立 systemd unit（範例）：
+  /etc/systemd/system/data-provider.service
+  -------------------------------
+  [Unit]
+  Description=Data Provider App
+  After=network.target
+
+  [Service]
+  User=ec2-user
+  WorkingDirectory=/home/ec2-user/app
+  EnvironmentFile=/home/ec2-user/app/.env
+  ExecStart=/usr/bin/java -jar /home/ec2-user/app/app.jar
+  SuccessExitStatus=143
+  Restart=on-failure
+  RestartSec=10
+
+  [Install]
+  WantedBy=multi-user.target
+  -------------------------------
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now data-provider.service
+
+- Env 檔範例 (`/home/ec2-user/app/.env`)：
+  DB_HOST=<RDS endpoint>
+  DB_PORT=5432
+  DB_NAME=stock_db
+  DB_USER=postgres
+  DB_PASSWORD=yourpassword
+  REDIS_HOST=<ElastiCache endpoint>
+  REDIS_PORT=6379
+
+- （可選）設定 Nginx 作為反向代理：
+  server {
+    listen 80;
+    server_name your.domain;
+    location / {
+      proxy_pass http://127.0.0.1:8080;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+  }
+  sudo systemctl restart nginx
+
+5) 資料庫遷移到 RDS
+- 建立 RDS instance，設定 master user & password
+- 將本機 dump 上傳到 EC2（或直接上傳 S3 再從 EC2 下載）：
+  scp -i key.pem stock_db_data.dump ec2-user@<EC2_IP>:/tmp/
+- 在 EC2 上執行還原到 RDS：
+  pg_restore -h <RDS endpoint> -U <rds_user> -d stock_db -v /tmp/stock_db_data.dump
+  # 若是 data-only，或需要先建立 schema，依情況調整
+
+6) Redis（ElastiCache）
+- 建議使用 ElastiCache：建立 Redis cluster 或單節點（依需求）
+- 更新 `.env` 的 REDIS_HOST 指向 ElastiCache endpoint
+
+7) DNS / TLS
+- 使用 ACM 申請 SSL（在 us-east-1 若用 CloudFront）
+- ALB 或 CloudFront 綁定 ACM 證書
+- Route53 建 A alias 指向 ALB 或 CloudFront
+
+8) 測試與驗證
+- 前端：確認 CloudFront URL 能載入 index.html
+- API：curl http://<domain>/api/health 或 http://<EC2_IP>:8080/heatMapData
+- 確認後端能成功連到 RDS 與 Redis
+
+9) 監控、備份與維運
+- RDS 自動 snapshot 與 retention
+- CloudWatch Logs：把後端日誌上傳到 CloudWatch
+- 建立 alarms（CPU、連線數、磁碟使用）
+- 定期備份重要資料並測試還原
+
+10) 回滾與安全考量
+- 若升級失敗，用 systemctl stop + restore 舊 jar
+- 建立最小 IAM 權限
+- 關閉不必要的公開 port（只允許 ALB/CloudFront 與 SSH 管理 IP）
+
+常用命令範例（摘要）
+- 上傳檔案：
+  scp -i key.pem target/app.jar ec2-user@<EC2_IP>:/home/ec2-user/app/app.jar
+- 啟動服務：
+  sudo systemctl enable --now data-provider.service
+  sudo journalctl -u data-provider.service -f
+- 前端上傳到 S3：
+  aws s3 sync _react/stock_react/dist/ s3://your-bucket/ --delete
+- 還原 Postgres：
+  pg_restore -h <RDS endpoint> -U <rds_user> -d stock_db /tmp/stock_db_data.dump
+
+估計時間（粗略）
+- 準備與建置（本機）：30-60 分鐘
+- 建立 AWS 資源（RDS/ElastiCache/CloudFront/S3/EC2）：30-90 分鐘（視網路/設定）
+- 上線測試與資料還原：30-120 分鐘（視資料量）
+
+後續選項與建議
+- 若希望更簡單：使用 Elastic Beanstalk 上傳 jar（Beantalk 會自動處理環境與 process），也可設定 RDS 與環境變數。
+- 若要高擴展性：前端放 S3+CloudFront，後端放 ECS/Fargate + ALB，RDS 與 ElastiCache 分離管理。
+
+---
+如要我把此文件轉成更詳細步驟（包含 exact AWS Console 路徑、CloudFormation 範本或 Terraform 腳本），或生成 `systemd` 與 `nginx` 的實際檔案與命令，我可以接著產出。請回覆要進一步生成的項目。
+
+附加：上傳本地 `stock_db` 資料到 AWS（RDS）
+-----------------------------------------
+說明：下面提供兩種上傳路徑：A) 直接把 dump 檔 SCP 到 EC2，再從 EC2 還原到 RDS（適合你已可 ssh 到 EC2）；B) 把 dump 上傳到 S3，EC2 或 RDS 可從 S3 下載還原（適合大檔或自動化）。
+
+1) 在本機匯出（壓縮建議）
+```bash
+# 匯出完整 DB（含 schema + data）
+pg_dump -h localhost -U <local_user> -F c -b -v -f ./stock_db_full.dump stock_db
+
+# 或匯出只有 data（若 RDS schema 已建立）
+pg_dump -h localhost -U <local_user> -F c -a -v -f ./stock_db_data.dump stock_db
+
+# 建議壓縮以減少傳輸時間
+gzip -c ./stock_db_full.dump > ./stock_db_full.dump.gz
+``` 
+
+2A) SCP 到 EC2，從 EC2 還原到 RDS（推薦簡單情境）
+```bash
+# 把檔案傳到 EC2
+scp -i key.pem ./stock_db_full.dump.gz ec2-user@<EC2_IP>:/tmp/
+
+# 連到 EC2，解壓
+ssh -i key.pem ec2-user@<EC2_IP>
+gunzip -c /tmp/stock_db_full.dump.gz > /tmp/stock_db_full.dump
+
+# 使用 pg_restore 還原到 RDS（會提示密碼或使用 PGPASSWORD 環境變數）
+export PGPASSWORD='<rds_password>'
+pg_restore -h <RDS_ENDPOINT> -U <rds_user> -d <target_db> -v /tmp/stock_db_full.dump
+
+# 若只想還原 data-only:
+pg_restore -h <RDS_ENDPOINT> -U <rds_user> -d <target_db> --data-only -v /tmp/stock_db_data.dump
+```
+
+2B) 上傳到 S3，再由 EC2 或 RDS 下載並還原（適合大檔/自動化）
+```bash
+# 本機上傳到 S3
+aws s3 cp ./stock_db_full.dump.gz s3://your-bucket/stock_db_full.dump.gz
+
+# 在 EC2 上下載
+aws s3 cp s3://your-bucket/stock_db_full.dump.gz /tmp/
+gunzip -c /tmp/stock_db_full.dump.gz > /tmp/stock_db_full.dump
+
+# 還原（同上）
+export PGPASSWORD='<rds_password>'
+pg_restore -h <RDS_ENDPOINT> -U <rds_user> -d <target_db> -v /tmp/stock_db_full.dump
+```
+
+3) 常見選項與注意事項
+- 若 dump 包含 `CREATE DATABASE` 並想覆蓋：使用 `pg_restore --clean --create`（會刪除並重新建立）——請小心，會覆蓋目標 DB。
+- 權限與 owner：若 RDS 使用不同使用者，建議加 `--no-owner --no-acl`，或在還原後重新設定擁有者。
+- 處理重複鍵：若還原時遇到 `duplicate key`，選項：
+  1) 在還原前 `TRUNCATE` 衝突的表（有資料風險，請先備份）；
+  2) 使用 `pg_restore` 的 `--data-only -t <table>` 單表還原，逐表處理錯誤資料；
+  3) 先建立 schema（`--schema-only`），再做 `--data-only` 還原。
+- 磁碟空間：在 EC2 還原大檔時請確認 `/tmp` 或目標磁碟有足夠空間；可先 `df -h`，需要時用 `aws s3` 直接 stream（避免本機解壓）或在 EC2 擴充磁碟。
+- 密碼安全：避免把密碼放在命令歷史，可使用 `PGPASSWORD` 臨時環境變數或 `.pgpass` 檔案（設定 600 權限）。
+
+4) 測試與驗證
+- 還原後檢查常用 table row count：
+  ```bash
+  psql -h <RDS_ENDPOINT> -U <rds_user> -d <target_db> -c "SELECT count(*) FROM sp500_list;"
+  ```
+- 驗證應用能連線：更新 EC2 `.env` 的 `DB_HOST` 指向 RDS endpoint，重啟後端 service，檢查 logs。
+
+5) 回滾策略
+- 在還原前 snapshot RDS（若使用 RDS，先做 snapshot），可在出問題時回復。
+- 若使用 data-only 還原，先 `pg_dump` 目前 RDS 的 data 做備份再還原。
+
+需要我做什麼？
+- 我可以生成一個可執行的上傳/還原腳本（bash），包含上傳到 S3、在 EC2 下載並執行 `pg_restore` 的步驟；或我可以直接在你的 EC2 上幫你執行還原（需要 SSH key 與確認）。

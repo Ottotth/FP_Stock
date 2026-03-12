@@ -1,0 +1,87 @@
+Redis：`lastcandle:{symbol}:{interval}`（覆寫最新一筆）說明（繁體中文）
+
+目的
+- 提供一個極簡且節省記憶體的選項：每個 `symbol+interval` 只保留「最新的一筆」last-candle，應用程式以覆寫（overwrite）方式寫入 Redis，讀取時直接取該 key 的內容。
+
+何時選用
+- 適用場景：系統只需要最新一筆資料作即時顯示或計算，不需要保留歷史 buckets。若需要歷史資料，請改用 per-bucket keys 或 hash-per-symbol 設計。
+
+設計概覽
+- Key 格式：`lastcandle:{symbol}:{interval}`（例如 `lastcandle:AAPL:1m`）
+- Value：JSON 序列化的 `LastCandleDto`（欄位範例：`bucketStart`, `open`, `high`, `low`, `close`, `updatedAt`）
+- 保留策略：用 `SETEX` 或 `SET ... EX` 設 TTL，自動過期
+
+寫入流程（簡潔）
+1. 從 Realtime event 計算 `bucketStart`。
+2. 建立 `LastCandleDto`，序列化成 JSON。
+3. 寫入 Redis（兩種常見方式）：
+  - 簡單覆寫：`SETEX lastcandle:AAPL:1m 86400 '<json>'`（TTL 由業務決定）
+  - 原子合併（若要在伺服器端維護 high/low）：呼叫 Lua 腳本做 GET->merge->SET + EXPIRE
+
+Lua 合併範例（概念）
+```lua
+-- KEYS[1]=key
+-- ARGV[1]=price
+-- ARGV[2]=updatedAt
+-- ARGV[3]=ttlSeconds (optional)
+local key = KEYS[1]
+local price = tonumber(ARGV[1])
+local updatedAt = ARGV[2]
+local ttl = tonumber(ARGV[3])
+local existing = redis.call('GET', key)
+if not existing or existing == false then
+  local obj = {open=price, high=price, low=price, close=price, updatedAt=updatedAt}
+  redis.call('SET', key, cjson.encode(obj))
+else
+  local t = cjson.decode(existing)
+  if price > (t.high or -1/0) then t.high = price end
+  if price < (t.low or 1/0) then t.low = price end
+  t.close = price
+  t.updatedAt = updatedAt
+  redis.call('SET', key, cjson.encode(t))
+end
+if ttl and ttl > 0 then redis.call('EXPIRE', key, ttl) end
+return 1
+```
+
+Java（Lettuce）寫入範例
+```java
+StatefulRedisConnection<String,String> conn = redisClient.connect();
+RedisCommands<String,String> sync = conn.sync();
+String key = "lastcandle:" + symbol + ":" + interval;
+String json = objectMapper.writeValueAsString(dto);
+sync.setex(key, 86400, json); // ttl = 86400s
+conn.close();
+```
+
+讀取流程
+- 單筆：`GET lastcandle:AAPL:1m` -> 反序列化為 `LastCandleDto`。
+- 若需要多筆（小視窗）：可在應用層維護一個索引（ZSET）或改用其他結構，否則 per-key 設計查詢成本較高。
+
+優點
+- 記憶體消耗小（每個 symbol+interval 只一個 key）。
+- 實作簡單、讀寫延遲低、TTL 自動清理容易。
+
+缺點與風險
+- 無法保留歷史 bucket（只有最新一筆）。
+- 若需要保證 high/low 的完整性，需用 Lua 做原子合併或在 producer 端合併。
+- 若資料必須強一致且不可丟失，Redis 本身仍需搭配 AOF/replica 或同步回 DB。
+
+監控與運維建議
+- 設定 `maxmemory` 與合適的 `maxmemory-policy`，監控 `used_memory`、key growth 與寫入速率。
+- 啟用 AOF 或使用託管 Redis（Replica + snapshot）以降低資料遺失風險。
+
+部署與測試建議
+- 把 Lua 腳本存放於 `scripts/`（例如 `scripts/lastcandle_merge.lua`）。
+- 在 `StockDataServiceImpl.updateLastCandlesFromRealtime` 實作 `SETEX` 或 `eval(lua, ...)`。
+- 撰寫單元測試（JSON 序列化、Lua 腳本邏輯）及壓力測試（大量寫入下記憶體/延遲行為）。
+
+結語
+- 若業務只需每個 `symbol+interval` 的最新值，使用 `lastcandle:{symbol}:{interval}` 覆寫是最簡單且成本最低的做法。若將來需要歷史或更複雜的查詢，可再改為 per-bucket key 或 hash 設計。
+
+如果要我幫你：
+- 我可以把 `updateLastCandlesFromRealtime` 改成使用 Lettuce 的 `SETEX`（並做 compile-check），或
+- 新增 Lua 合併腳本與測試到 `scripts/`，或
+- 把 `LastCandleDto` 更新為 `BigDecimal`/`Instant` 並加入序列化測試。
+
+請回覆想做的項目（例如「實作 SETEX」、「新增 Lua 腳本」、「更新 DTO」）。

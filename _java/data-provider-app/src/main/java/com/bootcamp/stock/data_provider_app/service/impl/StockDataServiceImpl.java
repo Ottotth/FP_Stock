@@ -2,13 +2,10 @@ package com.bootcamp.stock.data_provider_app.service.impl;
 
 
 import java.time.Duration;
-import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,12 +17,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.client.RestTemplate;
 import com.bootcamp.stock.data_provider_app.config.lib.CodeLib;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
-import com.bootcamp.stock.data_provider_app.entity.LastCandleEntity;
+import com.bootcamp.stock.data_provider_app.dto.LastCandleDto;
 import com.bootcamp.stock.data_provider_app.entity.OldStockDataEntity;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.mapper.DtoMapper;
@@ -34,7 +30,6 @@ import com.bootcamp.stock.data_provider_app.model.dto.RealTimeSTockDTO;
 import com.bootcamp.stock.data_provider_app.model.dto.StockChartDTO;
 import com.bootcamp.stock.data_provider_app.model.enums.Interval;
 import com.bootcamp.stock.data_provider_app.repository.HeatMapRepository;
-import com.bootcamp.stock.data_provider_app.repository.LastCandleRepository;
 import com.bootcamp.stock.data_provider_app.repository.OldStockDataRepository;
 import com.bootcamp.stock.data_provider_app.repository.SPListRepository;
 import com.bootcamp.stock.data_provider_app.repository.StockDataRepository;
@@ -80,12 +75,6 @@ public class StockDataServiceImpl implements StockDataService {
 
   @Autowired
   private SPListRepository spListRepository;
-
-  @Autowired
-  private LastCandleRepository lastCandleRepository;
-
-  @Autowired
-  private JdbcTemplate jdbcTemplate;
 
   @Autowired
   private CodeLib codeLib;
@@ -232,11 +221,12 @@ public class StockDataServiceImpl implements StockDataService {
     return spListRepository.findAllSymbols();
   }
 
+  // Last candle -------------------------------------------------------
   @Override
-  public LastCandleEntity getLastCandle(String symbol, String interval) {
-    return lastCandleRepository
-        .findTopBySymbolAndIntervalOrderByBucketStartDesc(symbol, interval)
-        .orElse(null);
+  public LastCandleDto getLastCandle(String symbol, String interval) {
+    String redisKey = "lastcandle:" + symbol + ":" + interval;
+    LastCandleDto dto = redisManager.get(redisKey, LastCandleDto.class);
+    return dto;
   }
 
   private void updateLastCandlesFromRealtime(RealTimeSTockDTO dto) {
@@ -249,7 +239,7 @@ public class StockDataServiceImpl implements StockDataService {
     }
 
     LocalDateTime updatedAt = LocalDateTime.now(ZoneId.of("UTC"));
-    Map<String, LastCandleUpsertRow> aggregated = new HashMap<>();
+    Map<String, LastCandleDto> aggregated = new HashMap<>();
 
     for (RealTimeSTockDTO.Result quote : results) {
       String symbol = quote.getSymbol();
@@ -267,21 +257,32 @@ public class StockDataServiceImpl implements StockDataService {
       }
 
       for (Interval interval : Interval.values()) {
+        // only intervals that support last-candle should be updated here
+        if (!interval.supportsLastCandle()) {
+          continue;
+        }
         String intervalValue = interval.getValue();
-        LocalDateTime bucketStart = toBucketStartUtc(marketTimeEpoch, intervalValue);
-        String key = buildLastCandleKey(symbol, intervalValue, bucketStart);
-        LastCandleUpsertRow row = aggregated.get(key);
+        LocalDateTime bucketStart = codeLib.toBucketStartUtc(marketTimeEpoch, intervalValue);
+        String key = codeLib.buildLastCandleKey(symbol, intervalValue, bucketStart);
+        LastCandleDto row = aggregated.get(key);
         if (row == null) {
-          aggregated.put(key, new LastCandleUpsertRow(symbol, intervalValue,
-              bucketStart, latestPrice, latestPrice, latestPrice, latestPrice,
-              updatedAt));
+          aggregated.put(key, LastCandleDto.builder()
+              .symbol(symbol)
+              .interval(intervalValue)
+              .bucketStart(bucketStart)
+              .open(latestPrice)
+              .high(latestPrice)
+              .low(latestPrice)
+              .close(latestPrice)
+              .updatedAt(updatedAt)
+              .build());
           continue;
         }
 
-        row.high = maxNullable(row.high, latestPrice);
-        row.low = minNullable(row.low, latestPrice);
-        row.close = latestPrice;
-        row.updatedAt = updatedAt;
+        row.setHigh(codeLib.maxNullable(row.getHigh(), latestPrice));
+        row.setLow(codeLib.minNullable(row.getLow(), latestPrice));
+        row.setClose(latestPrice);
+        row.setUpdatedAt(updatedAt);
       }
     }
 
@@ -289,122 +290,43 @@ public class StockDataServiceImpl implements StockDataService {
       return;
     }
 
-    batchUpsertLastCandles(aggregated.values());
-  }
+    // Write aggregated last-candle to Redis (overwrite per symbol+interval)
+    // TTL: 24 hours (adjust as needed)
+    Duration ttl = Duration.ofHours(24);
+    for (LastCandleDto row : aggregated.values()) {
+      String redisKey = "lastcandle:" + row.getSymbol() + ":" + row.getInterval();
+      // Read existing value and merge when bucketStart matches to preserve open/high/low
+      try {
+        LastCandleDto existing = this.redisManager.get(redisKey, LastCandleDto.class);
+        if (existing != null && existing.getBucketStart() != null && existing.getBucketStart().equals(row.getBucketStart())) {
+          // preserve the original open (first price in the bucket) if present
+          row.setOpen(existing.getOpen() != null ? existing.getOpen() : row.getOpen());
+          // merge high/low
+          row.setHigh(codeLib.maxNullable(existing.getHigh(), row.getHigh()));
+          row.setLow(codeLib.minNullable(existing.getLow(), row.getLow()));
+          // close should be the latest price (row.getClose())
+          row.setUpdatedAt(updatedAt);
+        }
+      } catch (Exception ex) {
+        // if any error occurs reading/merging, fall back to writing the new row
+        System.out.println("Warning: failed to merge existing lastcandle for key=" + redisKey + ", error=" + ex.getMessage());
+      }
 
-  private void batchUpsertLastCandles(Collection<LastCandleUpsertRow> rows) {
-    if (rows == null || rows.isEmpty()) {
-      return;
-    }
-
-    String sql = "INSERT INTO last_candle "
-        + "(symbol, interval, bucket_start, open_price, high_price, low_price, close_price, updated_at) "
-        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-        + "ON CONFLICT (symbol, interval, bucket_start) DO UPDATE SET "
-        + "open_price = COALESCE(last_candle.open_price, EXCLUDED.open_price), "
-        + "high_price = GREATEST(COALESCE(last_candle.high_price, EXCLUDED.high_price), EXCLUDED.high_price), "
-        + "low_price = LEAST(COALESCE(last_candle.low_price, EXCLUDED.low_price), EXCLUDED.low_price), "
-        + "close_price = EXCLUDED.close_price, "
-        + "updated_at = EXCLUDED.updated_at";
-
-    List<LastCandleUpsertRow> batch = rows.stream().collect(Collectors.toList());
-    jdbcTemplate.batchUpdate(sql, batch, batch.size(), (ps, row) -> {
-      ps.setString(1, row.symbol);
-      ps.setString(2, row.interval);
-      ps.setObject(3, row.bucketStart);
-      ps.setObject(4, row.open);
-      ps.setObject(5, row.high);
-      ps.setObject(6, row.low);
-      ps.setObject(7, row.close);
-      ps.setObject(8, row.updatedAt);
-    });
-  }
-
-  private String buildLastCandleKey(String symbol, String interval,
-      LocalDateTime bucketStart) {
-    return symbol + "|" + interval + "|" + bucketStart;
-  }
-
-  private static class LastCandleUpsertRow {
-    private final String symbol;
-    private final String interval;
-    private final LocalDateTime bucketStart;
-    private Double open;
-    private Double high;
-    private Double low;
-    private Double close;
-    private LocalDateTime updatedAt;
-
-    private LastCandleUpsertRow(String symbol, String interval,
-        LocalDateTime bucketStart, Double open, Double high, Double low,
-        Double close, LocalDateTime updatedAt) {
-      this.symbol = symbol;
-      this.interval = interval;
-      this.bucketStart = bucketStart;
-      this.open = open;
-      this.high = high;
-      this.low = low;
-      this.close = close;
-      this.updatedAt = updatedAt;
+      this.redisManager.set(redisKey, row, ttl);
     }
   }
 
-  private LocalDateTime toBucketStartUtc(long epochSeconds, String interval) {
-    ZonedDateTime utc = Instant.ofEpochSecond(epochSeconds).atZone(ZoneId.of("UTC"));
-    switch (interval) {
-      case "1m":
-        return utc.withSecond(0).withNano(0).toLocalDateTime();
-      case "5m":
-        return utc.withMinute((utc.getMinute() / 5) * 5)
-            .withSecond(0).withNano(0).toLocalDateTime();
-      case "15m":
-        return utc.withMinute((utc.getMinute() / 15) * 15)
-            .withSecond(0).withNano(0).toLocalDateTime();
-      case "30m":
-        return utc.withMinute((utc.getMinute() / 30) * 30)
-            .withSecond(0).withNano(0).toLocalDateTime();
-      case "1h":
-        return utc.withMinute(0).withSecond(0).withNano(0).toLocalDateTime();
-      case "4h":
-        return utc.withHour((utc.getHour() / 4) * 4)
-            .withMinute(0).withSecond(0).withNano(0).toLocalDateTime();
-      case "1wk":
-        ZonedDateTime weekStart = utc.with(DayOfWeek.MONDAY)
-            .withHour(0).withMinute(0).withSecond(0).withNano(0);
-        return weekStart.toLocalDateTime();
-      case "1mo":
-        return utc.withDayOfMonth(1).withHour(0).withMinute(0)
-            .withSecond(0).withNano(0).toLocalDateTime();
-      case "3mo":
-        int quarterStartMonth = ((utc.getMonthValue() - 1) / 3) * 3 + 1;
-        return utc.withMonth(quarterStartMonth).withDayOfMonth(1)
-            .withHour(0).withMinute(0).withSecond(0).withNano(0)
-            .toLocalDateTime();
-      case "1d":
-      default:
-        return utc.withHour(0).withMinute(0).withSecond(0).withNano(0).toLocalDateTime();
-    }
-  }
+  
 
-  private Double maxNullable(Double left, Double right) {
-    if (left == null) {
-      return right;
-    }
-    if (right == null) {
-      return left;
-    }
-    return Math.max(left, right);
-  }
+  
 
-  private Double minNullable(Double left, Double right) {
-    if (left == null) {
-      return right;
-    }
-    if (right == null) {
-      return left;
-    }
-    return Math.min(left, right);
-  }
+  
+
+  
+
+  
+
+  
 }
 
 

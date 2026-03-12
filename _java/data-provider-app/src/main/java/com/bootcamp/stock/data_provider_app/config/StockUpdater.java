@@ -52,10 +52,10 @@ public class StockUpdater {
 							stockDataService.getOldStockData(symbol, interval.getValue(), 30); // Example: 30 days
 							break;
 						case THIRTY_MINUTES:
-							stockDataService.getOldStockData(symbol, interval.getValue(), 60); // Example: 60 days
+							stockDataService.getOldStockData(symbol, interval.getValue(), 30); // Example: 30 days
 							break;
 						case ONE_HOUR:
-							stockDataService.getOldStockData(symbol, interval.getValue(), 90); // Example: 90 days
+							stockDataService.getOldStockData(symbol, interval.getValue(), 60); // Example: 60 days
 							break;
 						case FOUR_HOURS:
 							stockDataService.getOldStockData(symbol, interval.getValue(), 180); // Example: 180 days

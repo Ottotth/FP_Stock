@@ -15,7 +15,9 @@ public class RedisManager {
     RedisTemplate<String, String> redisTemplate = new RedisTemplate<>();
     redisTemplate.setConnectionFactory(redisConnectionFactory);
     redisTemplate.setKeySerializer(RedisSerializer.string());
-    redisTemplate.setValueSerializer(RedisSerializer.json()); // object -> json -> String
+    // We manually serialize objects to JSON strings before writing, so use string serializer
+    // to avoid double-encoding (JSON string being stored as JSON string literal).
+    redisTemplate.setValueSerializer(RedisSerializer.string());
     redisTemplate.afterPropertiesSet();
 
     this.redisTemplate = redisTemplate;

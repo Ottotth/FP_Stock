@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.bootcamp.stock.data_provider_app.controller.ClientOperation;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
-import com.bootcamp.stock.data_provider_app.entity.LastCandleEntity;
+import com.bootcamp.stock.data_provider_app.dto.LastCandleDto;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.YahooNewsDTO;
 import com.bootcamp.stock.data_provider_app.service.ClientService;
@@ -39,7 +39,7 @@ public class ClientController implements ClientOperation {
   }
 
   @Override
-  public LastCandleEntity getLastCandle(@RequestParam String symbol,
+  public LastCandleDto getLastCandle(@RequestParam String symbol,
       @RequestParam String interval) {
     return clientService.getLastCandle(symbol, interval);
   }

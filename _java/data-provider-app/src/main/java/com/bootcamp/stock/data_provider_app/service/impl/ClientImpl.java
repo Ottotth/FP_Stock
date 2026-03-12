@@ -14,7 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import com.bootcamp.stock.data_provider_app.config.lib.RedisManager;
 import com.bootcamp.stock.data_provider_app.dto.HeatMapDto;
 import com.bootcamp.stock.data_provider_app.entity.HeatMapEntity;
-import com.bootcamp.stock.data_provider_app.entity.LastCandleEntity;
+import com.bootcamp.stock.data_provider_app.dto.LastCandleDto;
 import com.bootcamp.stock.data_provider_app.entity.StockDataEntity;
 import com.bootcamp.stock.data_provider_app.model.dto.YahooNewsDTO;
 import com.bootcamp.stock.data_provider_app.repository.HeatMapRepository;
@@ -67,7 +67,7 @@ public class ClientImpl implements ClientService {
   }
 
   @Override
-  public LastCandleEntity getLastCandle(String symbol, String interval) {
+  public LastCandleDto getLastCandle(String symbol, String interval) {
     return stockDataService.getLastCandle(symbol, interval);
   }
 

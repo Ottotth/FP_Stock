@@ -1,18 +1,21 @@
+version: '3.8'
+
 services:
   postgres:
-    image: postgres:15
+    image: postgres:18
     container_name: postgres-container
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin1234}
       POSTGRES_DB: ${POSTGRES_DB:-stock_db}
-      PGDATA: /var/lib/postgresql/data/pgdata15
+      PGDATA: /var/lib/postgresql/data/pgdata18
     networks:
       - bootcamp-network
     ports:
       - "5532:5432"
     volumes:
-      - "./pgdata:/var/lib/postgresql/data/pgdata"
+      - pgdata18:/var/lib/postgresql/data/pgdata18
+    restart: unless-stopped
 
   redis:
     image: redis:7
@@ -22,12 +25,13 @@ services:
     ports:
       - "6479:6379"
     volumes:
-      - "./redis_data:/data"
+      - redis_data:/data
+    restart: unless-stopped
 
   data-provider-app:
     build:
-      context: ./_java/data-provider-app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: _java/data-provider-app/Dockerfile
     container_name: data-provider-app
     depends_on:
       - postgres
@@ -44,23 +48,15 @@ services:
       - "8080:8080"
     networks:
       - bootcamp-network
+    restart: unless-stopped
 
-  heatmap-ui-app:
-    build:
-      context: ./_react/stock_react
-      dockerfile: Dockerfile
-    container_name: heatmap-ui-app
-    depends_on:
-      - data-provider-app
-    ports:
-      - "5173:80"
-    networks:
-      - bootcamp-network
+  # heatmap-ui-app removed: frontend is now built into the Spring Boot image
 
 networks:
   bootcamp-network:
 
 volumes:
+  pgdata18:
   redis_data:
 
 

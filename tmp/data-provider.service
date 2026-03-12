@@ -1,0 +1,16 @@
+[Unit]
+Description=Data Provider App
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app
+ExecStart=/usr/bin/java -jar /home/ubuntu/app/app.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/app/app.log
+StandardError=append:/home/ubuntu/app/app.log
+
+[Install]
+WantedBy=multi-user.target
