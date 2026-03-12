@@ -1,4 +1,4 @@
-# FP_Stock Project 大綱
+# Stock Project 大綱
 
 這個倉庫包含兩個主要子應用程式：
 
