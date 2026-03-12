@@ -15,9 +15,11 @@
 - 支援即時股價更新與展示
 - 提供技術指標（如 K 線、趨勢圖、樹狀圖）視覺化
 - 前端可選擇不同股票並切換時間範圍
-![K 線圖介面](docs/images/candlestick.png)
 
-![樹狀圖介面](docs/images/treemap.png)
+  ![K 線圖介面](img/candleMap.png)
+
+  ![樹狀圖介面](img/heatMap.png)
+
 
 後端使用 Java/Spring Boot 提供資料 API，前端使用 React/Vite 顯示即時與歷史股價。
 
