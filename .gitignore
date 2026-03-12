@@ -99,6 +99,9 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 
+### Database dumps ###
+*.dump
+
 ### Misc ###
 *.tgz
 
