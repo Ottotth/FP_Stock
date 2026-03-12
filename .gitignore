@@ -102,6 +102,9 @@ pnpm-debug.log*
 ### Database dumps ###
 *.dump
 
+### Java artifacts ###
+*.jar
+
 ### Misc ###
 *.tgz
 
