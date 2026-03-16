@@ -17,9 +17,12 @@
 - 前端可選擇不同股票並切換時間範圍
 - 後端使用 Java/Spring Boot 提供資料 API，前端使用 React/Vite 顯示即時與歷史股價。
 
+![樹狀圖介面](img/heatMap.png)
+
 ![K 線圖介面](img/candleMap.png)
 
-![樹狀圖介面](img/heatMap.png)
+![K 線圖GIF](img/Mar-16-202623-58-34.gif)
+
 
 
 
