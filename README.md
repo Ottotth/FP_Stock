@@ -22,6 +22,7 @@
 ![K 線圖介面](img/candleMap.png)
 
 ![K 線圖GIF](img/Mar-16-202623-58-34.gif)
+GIF
 
 
 
